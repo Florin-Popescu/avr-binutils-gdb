@@ -1,12 +1,13 @@
-INSTALL_DIR=/home/avr-gdb
+#!/bin/bash
+
+INSTALL_DIR=/c/avr
 
 mkdir build
 cd build
 
-CFLAGS="-D__USE_MINGW_ACCESS"
-CXXFLAGS="-D__USE_MINGW_ACCESS"
-LDFLAGS='-static'
-
+CFLAGS="-D__USE_MINGW_ACCESS" \
+CXXFLAGS="-D__USE_MINGW_ACCESS" \
+LDFLAGS='-static' \
 ../configure \
 --prefix=$INSTALL_DIR \
 --target=avr \
