@@ -2,10 +2,6 @@
 
 case $(uname -o | cut -d '/' -f2) in
 	"Msys")
-		export CFLAGS="-D__USE_MINGW_ACCESS"
-		export CXXFLAGS="-D__USE_MINGW_ACCESS"
-		export LDFLAGS='-static'
-
 		SUDO=
 		;;
 	"Linux")
