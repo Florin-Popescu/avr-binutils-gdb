@@ -1,6 +1,6 @@
 /* Target-dependent code for Analog Devices Blackfin processor, for GDB.
 
-   Copyright (C) 2005-2020 Free Software Foundation, Inc.
+   Copyright (C) 2005-2021 Free Software Foundation, Inc.
 
    Contributed by Analog Devices, Inc.
 
@@ -31,7 +31,7 @@
 #include "dis-asm.h"
 #include "sim-regno.h"
 #include "gdb/sim-bfin.h"
-#include "dwarf2-frame.h"
+#include "dwarf2/frame.h"
 #include "symtab.h"
 #include "elf-bfd.h"
 #include "elf/bfin.h"
@@ -374,6 +374,7 @@ bfin_frame_prev_register (struct frame_info *this_frame,
 
 static const struct frame_unwind bfin_frame_unwind =
 {
+  "bfin prologue",
   NORMAL_FRAME,
   default_frame_unwind_stop_reason,
   bfin_frame_this_id,
@@ -510,7 +511,7 @@ bfin_push_dummy_call (struct gdbarch *gdbarch,
     {
       struct type *value_type = value_enclosing_type (args[i]);
 
-      total_len += (TYPE_LENGTH (value_type) + 3) & ~3;
+      total_len += align_up (TYPE_LENGTH (value_type), 4);
     }
 
   /* At least twelve bytes of stack space must be allocated for the function's
@@ -526,7 +527,7 @@ bfin_push_dummy_call (struct gdbarch *gdbarch,
     {
       struct type *value_type = value_enclosing_type (args[i]);
       struct type *arg_type = check_typedef (value_type);
-      int container_len = (TYPE_LENGTH (arg_type) + 3) & ~3;
+      int container_len = align_up (TYPE_LENGTH (arg_type), 4);
 
       sp -= container_len;
       write_memory (sp, value_contents (args[i]), container_len);
@@ -597,7 +598,7 @@ bfin_sw_breakpoint_from_kind (struct gdbarch *gdbarch, int kind, int *size)
 
   *size = kind;
 
-  if (strcmp (target_shortname, "sim") == 0)
+  if (strcmp (target_shortname (), "sim") == 0)
     return bfin_sim_breakpoint;
   else
     return bfin_breakpoint;
@@ -759,7 +760,7 @@ static const struct frame_base bfin_frame_base =
 static CORE_ADDR
 bfin_frame_align (struct gdbarch *gdbarch, CORE_ADDR address)
 {
-  return (address & ~0x3);
+  return align_down (address, 4);
 }
 
 enum bfin_abi
@@ -833,8 +834,9 @@ bfin_gdbarch_init (struct gdbarch_info info, struct gdbarch_list *arches)
   return gdbarch;
 }
 
+void _initialize_bfin_tdep ();
 void
-_initialize_bfin_tdep (void)
+_initialize_bfin_tdep ()
 {
   register_gdbarch_init (bfd_arch_bfin, bfin_gdbarch_init);
 }

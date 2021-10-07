@@ -1,5 +1,5 @@
 /* Select disassembly routine for specified architecture.
-   Copyright (C) 1994-2019 Free Software Foundation, Inc.
+   Copyright (C) 1994-2021 Free Software Foundation, Inc.
 
    This file is part of the GNU opcodes library.
 
@@ -21,7 +21,7 @@
 #include "sysdep.h"
 #include "disassemble.h"
 #include "safe-ctype.h"
-#include <assert.h>
+#include "opintl.h"
 
 #ifdef ARCH_all
 #define ARCH_aarch64
@@ -88,7 +88,6 @@
 #define ARCH_tic4x
 #define ARCH_tic54x
 #define ARCH_tic6x
-#define ARCH_tic80
 #define ARCH_tilegx
 #define ARCH_tilepro
 #define ARCH_v850
@@ -116,7 +115,7 @@
 # ifdef ARCH_m32c
 enum epbf_isa_attr
 {
- ISA_EBPFLE, ISA_EBPFBE, ISA_EBPFMAX
+  ISA_EBPFLE, ISA_EBPFBE, ISA_XBPFLE, ISA_XBPFBE, ISA_EBPFMAX
 };
 # else
 #  include "bpf-desc.h"
@@ -126,7 +125,7 @@ enum epbf_isa_attr
 
 disassembler_ftype
 disassembler (enum bfd_architecture a,
-	      bfd_boolean big ATTRIBUTE_UNUSED,
+	      bool big ATTRIBUTE_UNUSED,
 	      unsigned long mach ATTRIBUTE_UNUSED,
 	      bfd *abfd ATTRIBUTE_UNUSED)
 {
@@ -403,7 +402,7 @@ disassembler (enum bfd_architecture a,
 #endif
 #ifdef ARCH_riscv
     case bfd_arch_riscv:
-      disassemble = print_insn_riscv;
+      disassemble = riscv_get_disassembler (abfd);
       break;
 #endif
 #ifdef ARCH_rl78
@@ -462,11 +461,6 @@ disassembler (enum bfd_architecture a,
 #ifdef ARCH_tic6x
     case bfd_arch_tic6x:
       disassemble = print_insn_tic6x;
-      break;
-#endif
-#ifdef ARCH_tic80
-    case bfd_arch_tic80:
-      disassemble = print_insn_tic80;
       break;
 #endif
 #ifdef ARCH_ft32
@@ -612,19 +606,19 @@ disassemble_init_for_target (struct disassemble_info * info)
 #ifdef ARCH_aarch64
     case bfd_arch_aarch64:
       info->symbol_is_valid = aarch64_symbol_is_valid;
-      info->disassembler_needs_relocs = TRUE;
+      info->disassembler_needs_relocs = true;
       break;
 #endif
 #ifdef ARCH_arm
     case bfd_arch_arm:
       info->symbol_is_valid = arm_symbol_is_valid;
-      info->disassembler_needs_relocs = TRUE;
+      info->disassembler_needs_relocs = true;
       break;
 #endif
 #ifdef ARCH_csky
     case bfd_arch_csky:
       info->symbol_is_valid = csky_symbol_is_valid;
-      info->disassembler_needs_relocs = TRUE;
+      info->disassembler_needs_relocs = true;
       break;
 #endif
 
@@ -646,7 +640,7 @@ disassemble_init_for_target (struct disassemble_info * info)
 #endif
 #ifdef ARCH_metag
     case bfd_arch_metag:
-      info->disassembler_needs_relocs = TRUE;
+      info->disassembler_needs_relocs = true;
       break;
 #endif
 #ifdef ARCH_m32c
@@ -666,19 +660,28 @@ disassemble_init_for_target (struct disassemble_info * info)
 #endif
 #ifdef ARCH_bpf
     case bfd_arch_bpf:
+      info->endian_code = BFD_ENDIAN_LITTLE;
       if (!info->private_data)
 	{
-	  info->private_data = cgen_bitset_create (ISA_EBPFMAX);
+	  info->private_data = cgen_bitset_create (ISA_MAX);
 	  if (info->endian == BFD_ENDIAN_BIG)
-	    cgen_bitset_set (info->private_data, ISA_EBPFBE);
+	    {
+	      cgen_bitset_set (info->private_data, ISA_EBPFBE);
+	      if (info->mach == bfd_mach_xbpf)
+		cgen_bitset_set (info->private_data, ISA_XBPFBE);
+	    }
 	  else
-	    cgen_bitset_set (info->private_data, ISA_EBPFLE);
+	    {
+	      cgen_bitset_set (info->private_data, ISA_EBPFLE);
+	      if (info->mach == bfd_mach_xbpf)
+		cgen_bitset_set (info->private_data, ISA_XBPFLE);
+	    }
 	}
       break;
 #endif
 #ifdef ARCH_pru
     case bfd_arch_pru:
-      info->disassembler_needs_relocs = TRUE;
+      info->disassembler_needs_relocs = true;
       break;
 #endif
 #ifdef ARCH_powerpc
@@ -837,4 +840,12 @@ disassembler_options_cmp (const char *s1, const char *s2)
   while (c1 == c2);
 
   return c1 - c2;
+}
+
+void
+opcodes_assert (const char *file, int line)
+{
+  opcodes_error_handler (_("assertion fail %s:%d"), file, line);
+  opcodes_error_handler (_("Please report this bug"));
+  abort ();
 }

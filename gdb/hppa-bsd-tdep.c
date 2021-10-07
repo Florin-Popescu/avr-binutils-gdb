@@ -1,6 +1,6 @@
 /* Target-dependent code for HP PA-RISC BSD's.
 
-   Copyright (C) 2004-2020 Free Software Foundation, Inc.
+   Copyright (C) 2004-2021 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -26,7 +26,7 @@
 
 #include "hppa-tdep.h"
 #include "hppa-bsd-tdep.h"
-#include "dwarf2-frame.h"
+#include "dwarf2/frame.h"
 #include "solib-svr4.h"
 
 static CORE_ADDR
@@ -64,8 +64,8 @@ hppabsd_find_global_pointer (struct gdbarch *gdbarch, struct value *function)
 
       if (sec < faddr_sec->objfile->sections_end)
 	{
-	  CORE_ADDR addr = obj_section_addr (sec);
-	  CORE_ADDR endaddr = obj_section_endaddr (sec);
+	  CORE_ADDR addr = sec->addr ();
+	  CORE_ADDR endaddr = sec->endaddr ();
 
 	  while (addr < endaddr)
 	    {
@@ -87,8 +87,7 @@ hppabsd_find_global_pointer (struct gdbarch *gdbarch, struct value *function)
 		     we have to do it ourselves.  */
 		  pltgot = extract_unsigned_integer (buf, sizeof buf,
 						     byte_order);
-		  pltgot += ANOFFSET (sec->objfile->section_offsets,
-				      SECT_OFF_TEXT (sec->objfile));
+		  pltgot += sec->objfile->text_section_offset ();
 
 		  return pltgot;
 		}

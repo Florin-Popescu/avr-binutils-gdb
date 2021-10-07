@@ -1,6 +1,6 @@
 /* Maintenance commands for testing the settings framework.
 
-   Copyright (C) 2019-2020 Free Software Foundation, Inc.
+   Copyright (C) 2019-2021 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -27,26 +27,6 @@ static cmd_list_element *maintenance_set_test_settings_list;
 /* Command list for "maint show test-settings".  */
 static cmd_list_element *maintenance_show_test_settings_list;
 
-/* The "maintenance set test-settings" prefix command.  */
-
-static void
-maintenance_set_test_settings_cmd (const char *args, int from_tty)
-{
-  printf_unfiltered (_("\"maintenance set test-settings\" must be followed "
-		       "by the name of a set command.\n"));
-  help_list (maintenance_set_test_settings_list,
-	     "maintenance set test-settings ",
-	     all_commands, gdb_stdout);
-}
-
-/* The "maintenance show test-settings" prefix command.  */
-
-static void
-maintenance_show_test_settings_cmd (const char *args, int from_tty)
-{
-  cmd_show_list (maintenance_show_test_settings_list, from_tty, "");
-}
-
 /* Control variables for all the "maintenance set/show test-settings
    xxx" commands.  */
 
@@ -64,13 +44,13 @@ static unsigned int maintenance_test_settings_zuinteger;
 
 static int maintenance_test_settings_zuinteger_unlimited;
 
-static char *maintenance_test_settings_string;
+static std::string maintenance_test_settings_string;
 
-static char *maintenance_test_settings_string_noescape;
+static std::string maintenance_test_settings_string_noescape;
 
-static char *maintenance_test_settings_optional_filename;
+static std::string maintenance_test_settings_optional_filename;
 
-static char *maintenance_test_settings_filename;
+static std::string maintenance_test_settings_filename;
 
 /* Enum values for the "maintenance set/show test-settings boolean"
    commands.  */
@@ -99,26 +79,25 @@ maintenance_show_test_settings_value_cmd
 }
 
 
+void _initialize_maint_test_settings ();
 void
-_initialize_maint_test_settings (void)
+_initialize_maint_test_settings ()
 {
   maintenance_test_settings_filename = xstrdup ("/foo/bar");
 
-  add_prefix_cmd ("test-settings", class_maintenance,
-		  maintenance_set_test_settings_cmd, _("\
+  add_basic_prefix_cmd ("test-settings", class_maintenance,
+			_("\
 Set GDB internal variables used for set/show command infrastructure testing."),
-		  &maintenance_set_test_settings_list,
-		  "maintenance set test-settings ",
-		  0/*allow-unknown*/,
-		  &maintenance_set_cmdlist);
+			&maintenance_set_test_settings_list,
+			0/*allow-unknown*/,
+			&maintenance_set_cmdlist);
 
-  add_prefix_cmd ("test-settings", class_maintenance,
-		  maintenance_show_test_settings_cmd, _("\
+  add_show_prefix_cmd ("test-settings", class_maintenance,
+		       _("\
 Show GDB internal variables used for set/show command infrastructure testing."),
-		  &maintenance_show_test_settings_list,
-		  "maintenance show test-settings ",
-		  0/*allow-unknown*/,
-		  &maintenance_show_cmdlist);
+		       &maintenance_show_test_settings_list,
+		       0/*allow-unknown*/,
+		       &maintenance_show_cmdlist);
 
   add_setshow_boolean_cmd ("boolean", class_maintenance,
 			   &maintenance_test_settings_boolean, _("\

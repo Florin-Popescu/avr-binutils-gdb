@@ -1,5 +1,5 @@
 /* GDB routines for manipulating the minimal symbol tables.
-   Copyright (C) 1992-2020 Free Software Foundation, Inc.
+   Copyright (C) 1992-2021 Free Software Foundation, Inc.
    Contributed by Cygnus Support, using pieces from other GDB modules.
 
    This file is part of GDB.
@@ -54,11 +54,58 @@
 #include <algorithm>
 #include "safe-ctype.h"
 #include "gdbsupport/parallel-for.h"
-#include "maint.h"
+#include "inferior.h"
 
 #if CXX_STD_THREAD
 #include <mutex>
 #endif
+
+/* Return true if MINSYM is a cold clone symbol.
+   Recognize f.i. these symbols (mangled/demangled):
+   - _ZL3foov.cold
+     foo() [clone .cold]
+   - _ZL9do_rpo_vnP8functionP8edge_defP11bitmap_headbb.cold.138
+     do_rpo_vn(function*, edge_def*, bitmap_head*, bool, bool)	\
+       [clone .cold.138].  */
+
+static bool
+msymbol_is_cold_clone (minimal_symbol *minsym)
+{
+  const char *name = minsym->natural_name ();
+  size_t name_len = strlen (name);
+  if (name_len < 1)
+    return false;
+
+  const char *last = &name[name_len - 1];
+  if (*last != ']')
+    return false;
+
+  const char *suffix = " [clone .cold";
+  size_t suffix_len = strlen (suffix);
+  const char *found = strstr (name, suffix);
+  if (found == nullptr)
+    return false;
+
+  const char *start = &found[suffix_len];
+  if (*start == ']')
+    return true;
+
+  if (*start != '.')
+    return false;
+
+  const char *p;
+  for (p = start + 1; p <= last; ++p)
+    {
+      if (*p >= '0' && *p <= '9')
+	continue;
+      break;
+    }
+
+  if (p == last)
+    return true;
+
+  return false;
+}
 
 /* See minsyms.h.  */
 
@@ -78,10 +125,9 @@ msymbol_is_function (struct objfile *objfile, minimal_symbol *minsym,
     case mst_file_bss:
     case mst_data_gnu_ifunc:
       {
-	struct gdbarch *gdbarch = get_objfile_arch (objfile);
-	CORE_ADDR pc
-	  = gdbarch_convert_from_func_ptr_addr (gdbarch, msym_addr,
-						current_top_target ());
+	struct gdbarch *gdbarch = objfile->arch ();
+	CORE_ADDR pc = gdbarch_convert_from_func_ptr_addr
+	  (gdbarch, msym_addr, current_inferior ()->top_target ());
 	if (pc != msym_addr)
 	  {
 	    if (func_address_p != NULL)
@@ -90,6 +136,11 @@ msymbol_is_function (struct objfile *objfile, minimal_symbol *minsym,
 	  }
 	return false;
       }
+    case mst_file_text:
+      /* Ignore function symbol that is not a function entry.  */
+      if (msymbol_is_cold_clone (minsym))
+	return false;
+      /* fallthru */
     default:
       if (func_address_p != NULL)
 	*func_address_p = msym_addr;
@@ -163,7 +214,7 @@ add_minsym_to_demangled_hash_table (struct minimal_symbol *sym,
 {
   if (sym->demangled_hash_next == NULL)
     {
-      objfile->per_bfd->demangled_hash_languages.set (MSYMBOL_LANGUAGE (sym));
+      objfile->per_bfd->demangled_hash_languages.set (sym->language ());
 
       struct minimal_symbol **table
 	= objfile->per_bfd->msymbol_demangled_hash;
@@ -364,8 +415,8 @@ lookup_minimal_symbol (const char *name, const char *sfile,
 		       % MINIMAL_SYMBOL_HASH_SIZE);
 
 		  symbol_name_matcher_ftype *match
-		    = get_symbol_name_matcher (language_def (lang),
-					       lookup_name);
+		    = language_def (lang)->get_symbol_name_matcher
+							(lookup_name);
 		  struct minimal_symbol **msymbol_demangled_hash
 		    = objfile->per_bfd->msymbol_demangled_hash;
 
@@ -468,7 +519,7 @@ linkage_name_str (const lookup_name_info &lookup_name)
   if (current_language->la_language == language_ada)
     return lookup_name.ada ().lookup_name ().c_str ();
 
-  return lookup_name.name ().c_str ();
+  return lookup_name.c_str ();
 }
 
 /* See minsyms.h.  */
@@ -508,7 +559,7 @@ iterate_over_minimal_symbols
       enum language lang = (enum language) liter;
       const language_defn *lang_def = language_def (lang);
       symbol_name_matcher_ftype *name_match
-	= get_symbol_name_matcher (lang_def, lookup_name);
+	= lang_def->get_symbol_name_matcher (lookup_name);
 
       unsigned int hash
 	= lookup_name.search_name_hash (lang) % MINIMAL_SYMBOL_HASH_SIZE;
@@ -636,9 +687,9 @@ frob_address (struct objfile *objfile, CORE_ADDR *pc)
 
   ALL_OBJFILE_OSECTIONS (objfile, iter)
     {
-      if (*pc >= obj_section_addr (iter) && *pc < obj_section_endaddr (iter))
+      if (*pc >= iter->addr () && *pc < iter->endaddr ())
 	{
-	  *pc -= obj_section_offset (iter);
+	  *pc -= iter->offset ();
 	  return 1;
 	}
     }
@@ -667,24 +718,18 @@ msym_prefer_to_msym_type (lookup_msym_prefer prefer)
   gdb_assert_not_reached ("unhandled lookup_msym_prefer");
 }
 
-/* Search through the minimal symbol table for each objfile and find
-   the symbol whose address is the largest address that is still less
-   than or equal to PC, and matches SECTION (which is not NULL).
-   Returns a pointer to the minimal symbol if such a symbol is found,
-   or NULL if PC is not in a suitable range.
+/* See minsyms.h.
+
    Note that we need to look through ALL the minimal symbol tables
    before deciding on the symbol that comes closest to the specified PC.
    This is because objfiles can overlap, for example objfile A has .text
    at 0x100 and .data at 0x40000 and objfile B has .text at 0x234 and
-   .data at 0x40048.
-
-   If WANT_TRAMPOLINE is set, prefer mst_solib_trampoline symbols when
-   there are text and trampoline symbols at the same address.
-   Otherwise prefer mst_text symbols.  */
+   .data at 0x40048.  */
 
 bound_minimal_symbol
 lookup_minimal_symbol_by_pc_section (CORE_ADDR pc_in, struct obj_section *section,
-				     lookup_msym_prefer prefer)
+				     lookup_msym_prefer prefer,
+				     bound_minimal_symbol *previous)
 {
   int lo;
   int hi;
@@ -693,6 +738,12 @@ lookup_minimal_symbol_by_pc_section (CORE_ADDR pc_in, struct obj_section *sectio
   struct minimal_symbol *best_symbol = NULL;
   struct objfile *best_objfile = NULL;
   struct bound_minimal_symbol result;
+
+  if (previous != nullptr)
+    {
+      previous->minsym = nullptr;
+      previous->objfile = nullptr;
+    }
 
   if (section == NULL)
     {
@@ -719,13 +770,13 @@ lookup_minimal_symbol_by_pc_section (CORE_ADDR pc_in, struct obj_section *sectio
       CORE_ADDR pc = pc_in;
 
       /* If this objfile has a minimal symbol table, go search it
-         using a binary search.  */
+	 using a binary search.  */
 
       if (objfile->per_bfd->minimal_symbol_count > 0)
 	{
 	  int best_zero_sized = -1;
 
-          msymbol = objfile->per_bfd->msymbols.get ();
+	  msymbol = objfile->per_bfd->msymbols.get ();
 	  lo = 0;
 	  hi = objfile->per_bfd->minimal_symbol_count - 1;
 
@@ -767,8 +818,8 @@ lookup_minimal_symbol_by_pc_section (CORE_ADDR pc_in, struct obj_section *sectio
 		}
 
 	      /* If we have multiple symbols at the same address, we want
-	         hi to point to the last one.  That way we can find the
-	         right symbol if it has an index greater than hi.  */
+		 hi to point to the last one.  That way we can find the
+		 right symbol if it has an index greater than hi.  */
 	      while (hi < objfile->per_bfd->minimal_symbol_count - 1
 		     && (MSYMBOL_VALUE_RAW_ADDRESS (&msymbol[hi])
 			 == MSYMBOL_VALUE_RAW_ADDRESS (&msymbol[hi + 1])))
@@ -801,9 +852,9 @@ lookup_minimal_symbol_by_pc_section (CORE_ADDR pc_in, struct obj_section *sectio
 		      /* Some types of debug info, such as COFF,
 			 don't fill the bfd_section member, so don't
 			 throw away symbols on those platforms.  */
-		      && MSYMBOL_OBJ_SECTION (objfile, &msymbol[hi]) != NULL
+		      && msymbol[hi].obj_section (objfile) != nullptr
 		      && (!matching_obj_sections
-			  (MSYMBOL_OBJ_SECTION (objfile, &msymbol[hi]),
+			  (msymbol[hi].obj_section (objfile),
 			   section)))
 		    {
 		      hi--;
@@ -821,8 +872,8 @@ lookup_minimal_symbol_by_pc_section (CORE_ADDR pc_in, struct obj_section *sectio
 			  == MSYMBOL_SIZE (&msymbol[hi - 1]))
 		      && (MSYMBOL_VALUE_RAW_ADDRESS (&msymbol[hi])
 			  == MSYMBOL_VALUE_RAW_ADDRESS (&msymbol[hi - 1]))
-		      && (MSYMBOL_OBJ_SECTION (objfile, &msymbol[hi])
-			  == MSYMBOL_OBJ_SECTION (objfile, &msymbol[hi - 1])))
+		      && (msymbol[hi].obj_section (objfile)
+			  == msymbol[hi - 1].obj_section (objfile)))
 		    {
 		      hi--;
 		      continue;
@@ -887,13 +938,28 @@ lookup_minimal_symbol_by_pc_section (CORE_ADDR pc_in, struct obj_section *sectio
 		  if (best_zero_sized != -1)
 		    hi = best_zero_sized;
 		  else
-		    /* Go on to the next object file.  */
-		    continue;
+		    {
+		      /* If needed record this symbol as the closest
+			 previous symbol.  */
+		      if (previous != nullptr)
+			{
+			  if (previous->minsym == nullptr
+			      || (MSYMBOL_VALUE_RAW_ADDRESS (&msymbol[hi])
+				  > MSYMBOL_VALUE_RAW_ADDRESS
+					(previous->minsym)))
+			    {
+			      previous->minsym = &msymbol[hi];
+			      previous->objfile = objfile;
+			    }
+			}
+		      /* Go on to the next object file.  */
+		      continue;
+		    }
 		}
 
 	      /* The minimal symbol indexed by hi now is the best one in this
-	         objfile's minimal symbol table.  See if it is the best one
-	         overall.  */
+		 objfile's minimal symbol table.  See if it is the best one
+		 overall.  */
 
 	      if (hi >= 0
 		  && ((best_symbol == NULL) ||
@@ -994,8 +1060,12 @@ get_symbol_leading_char (bfd *abfd)
 {
   if (abfd != NULL)
     return bfd_get_symbol_leading_char (abfd);
-  if (symfile_objfile != NULL && symfile_objfile->obfd != NULL)
-    return bfd_get_symbol_leading_char (symfile_objfile->obfd);
+  if (current_program_space->symfile_object_file != NULL)
+    {
+      objfile *objf = current_program_space->symfile_object_file;
+      if (objf->obfd != NULL)
+	return bfd_get_symbol_leading_char (objf->obfd);
+    }
   return 0;
 }
 
@@ -1118,7 +1188,7 @@ minimal_symbol_reader::record_full (gdb::string_view name,
 
   if (symtab_create_debug >= 2)
     printf_unfiltered ("Recording minsym:  %-21s  %18s  %4d  %.*s\n",
-               mst_str (ms_type), hex_string (address), section,
+	       mst_str (ms_type), hex_string (address), section,
 	       (int) name.size (), name.data ());
 
   if (m_msym_bunch_index == BUNCH_SIZE)
@@ -1129,26 +1199,17 @@ minimal_symbol_reader::record_full (gdb::string_view name,
       m_msym_bunch = newobj;
     }
   msymbol = &m_msym_bunch->contents[m_msym_bunch_index];
-  symbol_set_language (msymbol, language_auto,
-		       &m_objfile->per_bfd->storage_obstack);
+  msymbol->set_language (language_auto,
+			 &m_objfile->per_bfd->storage_obstack);
 
   if (copy_name)
-    msymbol->name = obstack_strndup (&m_objfile->per_bfd->storage_obstack,
-				     name.data (), name.size ());
+    msymbol->m_name = obstack_strndup (&m_objfile->per_bfd->storage_obstack,
+				       name.data (), name.size ());
   else
-    msymbol->name = name.data ();
-
-  if (worker_threads_disabled ())
-    {
-      /* To keep our behavior as close as possible to the previous non-threaded
-	 behavior for GDB 9.1, we call symbol_set_names here when threads
-	 are disabled.  */
-      symbol_set_names (msymbol, msymbol->name, false, m_objfile->per_bfd);
-      msymbol->name_set = 1;
-    }
+    msymbol->m_name = name.data ();
 
   SET_MSYMBOL_VALUE_ADDRESS (msymbol, address);
-  MSYMBOL_SECTION (msymbol) = section;
+  msymbol->set_section_index (section);
 
   MSYMBOL_TYPE (msymbol) = ms_type;
 
@@ -1237,7 +1298,8 @@ compact_minimal_symbols (struct minimal_symbol *msymbol, int mcount,
 	{
 	  if (MSYMBOL_VALUE_RAW_ADDRESS (copyfrom)
 	      == MSYMBOL_VALUE_RAW_ADDRESS ((copyfrom + 1))
-	      && MSYMBOL_SECTION (copyfrom) == MSYMBOL_SECTION (copyfrom + 1)
+	      && (copyfrom->section_index ()
+		  == (copyfrom + 1)->section_index ())
 	      && strcmp (copyfrom->linkage_name (),
 			 (copyfrom + 1)->linkage_name ()) == 0)
 	    {
@@ -1337,9 +1399,9 @@ minimal_symbol_reader::install ()
 	}
 
       /* Allocate enough space, into which we will gather the bunches
-         of new and existing minimal symbols, sort them, and then
-         compact out the duplicate entries.  Once we have a final
-         table, we will give back the excess space.  */
+	 of new and existing minimal symbols, sort them, and then
+	 compact out the duplicate entries.  Once we have a final
+	 table, we will give back the excess space.  */
 
       alloc_count = m_msym_count + m_objfile->per_bfd->minimal_symbol_count;
       gdb::unique_xmalloc_ptr<minimal_symbol>
@@ -1354,10 +1416,10 @@ minimal_symbol_reader::install ()
 		* sizeof (struct minimal_symbol));
 
       /* Walk through the list of minimal symbol bunches, adding each symbol
-         to the new contiguous array of symbols.  Note that we start with the
-         current, possibly partially filled bunch (thus we use the current
-         msym_bunch_index for the first bunch we copy over), and thereafter
-         each bunch is full.  */
+	 to the new contiguous array of symbols.  Note that we start with the
+	 current, possibly partially filled bunch (thus we use the current
+	 msym_bunch_index for the first bunch we copy over), and thereafter
+	 each bunch is full.  */
 
       mcount = m_objfile->per_bfd->minimal_symbol_count;
 
@@ -1374,7 +1436,7 @@ minimal_symbol_reader::install ()
       std::sort (msymbols, msymbols + mcount, minimal_symbol_is_less_than);
 
       /* Compact out any duplicates, and free up whatever space we are
-         no longer using.  */
+	 no longer using.  */
 
       mcount = compact_minimal_symbols (msymbols, mcount, m_objfile);
       msym_holder.reset (XRESIZEVEC (struct minimal_symbol,
@@ -1382,8 +1444,8 @@ minimal_symbol_reader::install ()
 				     mcount));
 
       /* Attach the minimal symbol table to the specified objfile.
-         The strings themselves are also located in the storage_obstack
-         of this objfile.  */
+	 The strings themselves are also located in the storage_obstack
+	 of this objfile.  */
 
       if (m_objfile->per_bfd->minimal_symbol_count != 0)
 	clear_minimal_symbol_hash_tables (m_objfile);
@@ -1407,22 +1469,23 @@ minimal_symbol_reader::install ()
 	   for (minimal_symbol *msym = start; msym < end; ++msym)
 	     {
 	       size_t idx = msym - msymbols;
-	       hash_values[idx].name_length = strlen (msym->name);
+	       hash_values[idx].name_length = strlen (msym->linkage_name ());
 	       if (!msym->name_set)
 		 {
-		   /* This will be freed later, by symbol_set_names.  */
-		   char *demangled_name
-		     = symbol_find_demangled_name (msym, msym->name);
-		   symbol_set_demangled_name
-		     (msym, demangled_name,
+		   /* This will be freed later, by compute_and_set_names.  */
+		   gdb::unique_xmalloc_ptr<char> demangled_name
+		     = symbol_find_demangled_name (msym, msym->linkage_name ());
+		   msym->set_demangled_name
+		     (demangled_name.release (),
 		      &m_objfile->per_bfd->storage_obstack);
 		   msym->name_set = 1;
 		 }
 	       /* This mangled_name_hash computation has to be outside of
-		  the name_set check, or symbol_set_names below will
+		  the name_set check, or compute_and_set_names below will
 		  be called with an invalid hash value.  */
 	       hash_values[idx].mangled_name_hash
-		 = fast_hash (msym->name, hash_values[idx].name_length);
+		 = fast_hash (msym->linkage_name (),
+			      hash_values[idx].name_length);
 	       hash_values[idx].minsym_hash
 		 = msymbol_hash (msym->linkage_name ());
 	       /* We only use this hash code if the search name differs
@@ -1430,22 +1493,20 @@ minimal_symbol_reader::install ()
 		  build_minimal_symbol_hash_tables.  */
 	       if (msym->search_name () != msym->linkage_name ())
 		 hash_values[idx].minsym_demangled_hash
-		   = search_name_hash (MSYMBOL_LANGUAGE (msym),
-				       msym->search_name ());
+		   = search_name_hash (msym->language (), msym->search_name ());
 	     }
 	   {
 	     /* To limit how long we hold the lock, we only acquire it here
-	        and not while we demangle the names above.  */
+		and not while we demangle the names above.  */
 #if CXX_STD_THREAD
 	     std::lock_guard<std::mutex> guard (demangled_mutex);
 #endif
 	     for (minimal_symbol *msym = start; msym < end; ++msym)
 	       {
 		 size_t idx = msym - msymbols;
-		 symbol_set_names
-		   (msym,
-		    gdb::string_view(msym->name,
-				     hash_values[idx].name_length),
+		 msym->compute_and_set_names
+		   (gdb::string_view (msym->linkage_name (),
+				      hash_values[idx].name_length),
 		    false,
 		    m_objfile->per_bfd,
 		    hash_values[idx].mangled_name_hash);
@@ -1544,24 +1605,24 @@ minimal_symbol_upper_bound (struct bound_minimal_symbol minsym)
     = (minsym.objfile->per_bfd->msymbols.get ()
        + minsym.objfile->per_bfd->minimal_symbol_count);
   msymbol = minsym.minsym;
-  section = MSYMBOL_SECTION (msymbol);
+  section = msymbol->section_index ();
   for (iter = msymbol + 1; iter != past_the_end; ++iter)
     {
       if ((MSYMBOL_VALUE_RAW_ADDRESS (iter)
 	   != MSYMBOL_VALUE_RAW_ADDRESS (msymbol))
-	  && MSYMBOL_SECTION (iter) == section)
+	  && iter->section_index () == section)
 	break;
     }
 
-  obj_section = MSYMBOL_OBJ_SECTION (minsym.objfile, minsym.minsym);
+  obj_section = minsym.obj_section ();
   if (iter != past_the_end
       && (MSYMBOL_VALUE_ADDRESS (minsym.objfile, iter)
-	  < obj_section_endaddr (obj_section)))
+	  < obj_section->endaddr ()))
     result = MSYMBOL_VALUE_ADDRESS (minsym.objfile, iter);
   else
     /* We got the start address from the last msymbol in the objfile.
        So the end address is the end of the section.  */
-    result = obj_section_endaddr (obj_section);
+    result = obj_section->endaddr ();
 
   return result;
 }

@@ -1,5 +1,5 @@
 /* Disassemble support for GDB.
-   Copyright (C) 2002-2020 Free Software Foundation, Inc.
+   Copyright (C) 2002-2021 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -46,6 +46,10 @@ public:
   gdb_disassembler (struct gdbarch *gdbarch, struct ui_file *file)
     : gdb_disassembler (gdbarch, file, dis_asm_read_memory)
   {}
+
+  ~gdb_disassembler ();
+
+  DISABLE_COPY_AND_ASSIGN (gdb_disassembler);
 
   int print_insn (CORE_ADDR memaddr, int *branch_delay_insns = NULL);
 
@@ -160,6 +164,6 @@ extern char *get_disassembler_options (struct gdbarch *gdbarch);
 
 /* Sets the active gdbarch's disassembler options to OPTIONS.  */
 
-extern void set_disassembler_options (char *options);
+extern void set_disassembler_options (const char *options);
 
 #endif

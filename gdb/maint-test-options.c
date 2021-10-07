@@ -1,6 +1,6 @@
 /* Maintenance commands for testing the options framework.
 
-   Copyright (C) 2019-2020 Free Software Foundation, Inc.
+   Copyright (C) 2019-2021 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -133,16 +133,11 @@ struct test_options_opts
   const char *enum_opt = test_options_enum_values_xxx;
   unsigned int uint_opt = 0;
   int zuint_unl_opt = 0;
-  char *string_opt = nullptr;
+  std::string string_opt;
 
   test_options_opts () = default;
 
   DISABLE_COPY_AND_ASSIGN (test_options_opts);
-
-  ~test_options_opts ()
-  {
-    xfree (string_opt);
-  }
 
   /* Dump the options to FILE.  ARGS is the remainder unprocessed
      arguments.  */
@@ -162,9 +157,7 @@ struct test_options_opts
 			(zuint_unl_opt == -1
 			 ? "unlimited"
 			 : plongest (zuint_unl_opt)),
-			(string_opt != nullptr
-			 ? string_opt
-			 : ""),
+			string_opt.c_str (),
 			args);
   }
 };
@@ -409,32 +402,20 @@ maintenance_test_options_unknown_is_operand_command_completer
 }
 
 /* Command list for maint test-options.  */
-struct cmd_list_element *maintenance_test_options_list;
-
-/* The "maintenance test-options" prefix command.  */
-
-static void
-maintenance_test_options_command (const char *arg, int from_tty)
-{
-  printf_unfiltered
-    (_("\"maintenance test-options\" must be followed "
-       "by the name of a subcommand.\n"));
-  help_list (maintenance_test_options_list, "maintenance test-options ",
-	     all_commands, gdb_stdout);
-}
+static cmd_list_element *maintenance_test_options_list;
 
 
+void _initialize_maint_test_options ();
 void
 _initialize_maint_test_options ()
 {
   cmd_list_element *cmd;
 
-  add_prefix_cmd ("test-options", no_class, maintenance_test_options_command,
-		  _("\
+  add_basic_prefix_cmd ("test-options", no_class,
+			_("\
 Generic command for testing the options infrastructure."),
-		  &maintenance_test_options_list,
-		  "maintenance test-options ", 0,
-		  &maintenancelist);
+			&maintenance_test_options_list,
+			0, &maintenancelist);
 
   const auto def_group = make_test_options_options_def_group (nullptr);
 

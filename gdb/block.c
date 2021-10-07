@@ -1,6 +1,6 @@
 /* Block-related functions for the GNU debugger, GDB.
 
-   Copyright (C) 2003-2020 Free Software Foundation, Inc.
+   Copyright (C) 2003-2021 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -62,7 +62,7 @@ block_gdbarch (const struct block *block)
   if (BLOCK_FUNCTION (block) != NULL)
     return symbol_arch (BLOCK_FUNCTION (block));
 
-  return get_objfile_arch (block_objfile (block));
+  return block_objfile (block)->arch ();
 }
 
 /* See block.h.  */
@@ -79,9 +79,9 @@ contained_in (const struct block *a, const struct block *b,
       if (a == b)
 	return true;
       /* If A is a function block, then A cannot be contained in B,
-         except if A was inlined.  */
+	 except if A was inlined.  */
       if (!allow_nested && BLOCK_FUNCTION (a) != NULL && !block_inlined_p (a))
-        return false;
+	return false;
       a = BLOCK_SUPERBLOCK (a);
     }
   while (a != NULL);
@@ -166,6 +166,8 @@ find_block_in_blockvector (const struct blockvector *bl, CORE_ADDR pc)
   while (bot >= STATIC_BLOCK)
     {
       b = BLOCKVECTOR_BLOCK (bl, bot);
+      if (!(BLOCK_START (b) <= pc))
+	return NULL;
       if (BLOCK_END (b) > pc)
 	return b;
       bot--;
@@ -223,15 +225,15 @@ struct call_site *
 call_site_for_pc (struct gdbarch *gdbarch, CORE_ADDR pc)
 {
   struct compunit_symtab *cust;
-  void **slot = NULL;
+  call_site *cs = nullptr;
 
   /* -1 as tail call PC can be already after the compilation unit range.  */
   cust = find_pc_compunit_symtab (pc - 1);
 
-  if (cust != NULL && COMPUNIT_CALL_SITE_HTAB (cust) != NULL)
-    slot = htab_find_slot (COMPUNIT_CALL_SITE_HTAB (cust), &pc, NO_INSERT);
+  if (cust != nullptr)
+    cs = cust->find_call_site (pc);
 
-  if (slot == NULL)
+  if (cs == nullptr)
     {
       struct bound_minimal_symbol msym = lookup_minimal_symbol_by_pc (pc);
 
@@ -245,7 +247,7 @@ call_site_for_pc (struct gdbarch *gdbarch, CORE_ADDR pc)
 		    : msym.minsym->print_name ()));
     }
 
-  return (struct call_site *) *slot;
+  return cs;
 }
 
 /* Return the blockvector immediately containing the innermost lexical block
@@ -657,19 +659,18 @@ block_iter_match_next (const lookup_name_info &name,
   return block_iter_match_step (iterator, name, 0);
 }
 
-/* Return true if symbol A is the best match possible for DOMAIN.  */
+/* See block.h.  */
 
-static bool
+bool
 best_symbol (struct symbol *a, const domain_enum domain)
 {
   return (SYMBOL_DOMAIN (a) == domain
 	  && SYMBOL_CLASS (a) != LOC_UNRESOLVED);
 }
 
-/* Return symbol B if it is a better match than symbol A for DOMAIN.
-   Otherwise return A.  */
+/* See block.h.  */
 
-static struct symbol *
+struct symbol *
 better_symbol (struct symbol *a, struct symbol *b, const domain_enum domain)
 {
   if (a == NULL)
@@ -729,7 +730,7 @@ block_lookup_symbol (const struct block *block, const char *name,
 	     STRUCT vs VAR domain symbols.  So if a matching symbol is found,
 	     make sure there is no "better" matching symbol, i.e., one with
 	     exactly the same domain.  PR 16253.  */
-	  if (symbol_matches_domain (SYMBOL_LANGUAGE (sym),
+	  if (symbol_matches_domain (sym->language (),
 				     SYMBOL_DOMAIN (sym), domain))
 	    other = better_symbol (other, sym, domain);
 	}
@@ -750,7 +751,7 @@ block_lookup_symbol (const struct block *block, const char *name,
 
       ALL_BLOCK_SYMBOLS_WITH_NAME (block, lookup_name, iter, sym)
 	{
-	  if (symbol_matches_domain (SYMBOL_LANGUAGE (sym),
+	  if (symbol_matches_domain (sym->language (),
 				     SYMBOL_DOMAIN (sym), domain))
 	    {
 	      sym_found = sym;
@@ -819,8 +820,7 @@ block_lookup_symbol_primary (const struct block *block, const char *name,
 	 STRUCT vs VAR domain symbols.  So if a matching symbol is found,
 	 make sure there is no "better" matching symbol, i.e., one with
 	 exactly the same domain.  PR 16253.  */
-      if (symbol_matches_domain (SYMBOL_LANGUAGE (sym),
-				 SYMBOL_DOMAIN (sym), domain))
+      if (symbol_matches_domain (sym->language (), SYMBOL_DOMAIN (sym), domain))
 	other = better_symbol (other, sym, domain);
     }
 
@@ -847,8 +847,7 @@ block_find_symbol (const struct block *block, const char *name,
     {
       /* MATCHER is deliberately called second here so that it never sees
 	 a non-domain-matching symbol.  */
-      if (symbol_matches_domain (SYMBOL_LANGUAGE (sym),
-				 SYMBOL_DOMAIN (sym), domain)
+      if (symbol_matches_domain (sym->language (), SYMBOL_DOMAIN (sym), domain)
 	  && matcher (sym, data))
 	return sym;
     }
@@ -880,14 +879,14 @@ block_find_non_opaque_type_preferred (struct symbol *sym, void *data)
 
 struct blockranges *
 make_blockranges (struct objfile *objfile,
-                  const std::vector<blockrange> &rangevec)
+		  const std::vector<blockrange> &rangevec)
 {
   struct blockranges *blr;
   size_t n = rangevec.size();
 
   blr = (struct blockranges *)
     obstack_alloc (&objfile->objfile_obstack,
-                   sizeof (struct blockranges)
+		   sizeof (struct blockranges)
 		   + (n - 1) * sizeof (struct blockrange));
 
   blr->nranges = n;

@@ -30,8 +30,11 @@ cgen-dis.c
 cgen-opc.c
 cr16-dis.c
 cr16-opc.c
+cris-desc.c
+cris-desc.h
 cris-dis.c
 cris-opc.c
+cris-opc.h
 crx-dis.c
 crx-opc.c
 csky-dis.c
@@ -205,8 +208,6 @@ tic4x-dis.c
 tic54x-dis.c
 tic54x-opc.c
 tic6x-dis.c
-tic80-dis.c
-tic80-opc.c
 tilegx-dis.c
 tilegx-opc.c
 tilepro-dis.c

@@ -1,6 +1,6 @@
 /* Read a symbol table in MIPS' format (Third-Eye).
 
-   Copyright (C) 1986-2020 Free Software Foundation, Inc.
+   Copyright (C) 1986-2021 Free Software Foundation, Inc.
 
    Contributed by Alessandro Forin (af@cs.cmu.edu) at CMU.  Major work
    by Per Bothner, John Gilmore and Ian Lance Taylor at Cygnus Support.
@@ -43,7 +43,6 @@
 
 static void
 read_alphacoff_dynamic_symtab (minimal_symbol_reader &,
-			       struct section_offsets *,
 			       struct objfile *objfile);
 
 /* Initialize anything that needs initializing when a completely new
@@ -84,7 +83,7 @@ mipscoff_symfile_read (struct objfile *objfile, symfile_add_flags symfile_flags)
 
   /* Add alpha coff dynamic symbols.  */
 
-  read_alphacoff_dynamic_symtab (reader, objfile->section_offsets, objfile);
+  read_alphacoff_dynamic_symtab (reader, objfile);
 
   /* Install any minimal symbols that have been collected as the current
      minimal symbols for this objfile.  */
@@ -174,7 +173,6 @@ alphacoff_locate_sections (bfd *ignore_abfd, asection *sectp, void *sip)
 
 static void
 read_alphacoff_dynamic_symtab (minimal_symbol_reader &reader,
-			       struct section_offsets *section_offsets,
 			       struct objfile *objfile)
 {
   bfd *abfd = objfile->obfd;
@@ -371,18 +369,17 @@ static const struct sym_fns ecoff_sym_fns =
   mipscoff_new_init,		/* init anything gbl to entire symtab */
   mipscoff_symfile_init,	/* read initial info, setup for sym_read() */
   mipscoff_symfile_read,	/* read a symbol file into symtab */
-  NULL,				/* sym_read_psymbols */
   mipscoff_symfile_finish,	/* finished with file, cleanup */
   default_symfile_offsets,	/* dummy FIXME til implem sym reloc */
   default_symfile_segments,	/* Get segment information from a file.  */
   NULL,
   default_symfile_relocate,	/* Relocate a debug section.  */
   NULL,				/* sym_probe_fns */
-  &psym_functions
 };
 
+void _initialize_mipsread ();
 void
-_initialize_mipsread (void)
+_initialize_mipsread ()
 {
   add_symtab_fns (bfd_target_ecoff_flavour, &ecoff_sym_fns);
 }

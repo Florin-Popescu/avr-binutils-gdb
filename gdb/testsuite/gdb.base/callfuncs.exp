@@ -1,4 +1,4 @@
-# Copyright 1992-2020 Free Software Foundation, Inc.
+# Copyright 1992-2021 Free Software Foundation, Inc.
 
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -224,13 +224,13 @@ proc do_function_calls {prototypes} {
 
     if [support_complex_tests] {
 
-	gdb_test "p t_structs_fc(struct_val1)" ".*= 3 \\+ 3 \\* I" \
+	gdb_test "p t_structs_fc(struct_val1)" ".*= 3 \\+ 3i" \
 	    "call inferior func with struct - returns float _Complex"
 
-	gdb_test "p t_structs_dc(struct_val1)" ".*= 4 \\+ 4 \\* I" \
+	gdb_test "p t_structs_dc(struct_val1)" ".*= 4 \\+ 4i" \
 	    "call inferior func with struct - returns double _Complex"
 
-	gdb_test "p t_structs_ldc(struct_val1)" "= 5 \\+ 5 \\* I" \
+	gdb_test "p t_structs_ldc(struct_val1)" "= 5 \\+ 5i" \
 	    "call inferior func with struct - returns long double _Complex"
     }
 
@@ -332,7 +332,7 @@ proc rerun_and_prepare {} {
     with_test_prefix "rerun number ${rerun_count}" {
 
 	if { ![runto_main] } {
-	    gdb_suppress_tests
+	    return
 	}
 
 	gdb_test_no_output "set language c"

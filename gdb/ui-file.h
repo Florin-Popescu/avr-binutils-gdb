@@ -1,5 +1,5 @@
 /* UI_FILE - a generic STDIO like output stream.
-   Copyright (C) 1999-2020 Free Software Foundation, Inc.
+   Copyright (C) 1999-2021 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -83,6 +83,11 @@ public:
 
   virtual void flush ()
   {}
+
+  /* If this object has an underlying file descriptor, then return it.
+     Otherwise, return -1.  */
+  virtual int fd () const
+  { return -1; }
 };
 
 typedef std::unique_ptr<ui_file> ui_file_up;
@@ -99,20 +104,6 @@ public:
 
 /* A preallocated null_file stream.  */
 extern null_file null_stream;
-
-extern void ui_file_flush (ui_file *);
-
-extern int ui_file_isatty (struct ui_file *);
-
-extern void ui_file_write (struct ui_file *file, const char *buf,
-			   long length_buf);
-
-extern void ui_file_write_async_safe (struct ui_file *file, const char *buf,
-				      long length_buf);
-
-extern long ui_file_read (struct ui_file *file, char *buf, long length_buf);
-
-extern void ui_file_puts (struct ui_file *file, const char *buf);
 
 extern int gdb_console_fputs (const char *, FILE *);
 
@@ -208,6 +199,10 @@ public:
   bool isatty () override;
 
   bool can_emit_style_escape () override;
+
+  /* Return the underlying file descriptor.  */
+  int fd () const override
+  { return m_fd; }
 
 private:
   /* Sets the internal stream to FILE, and saves the FILE's file

@@ -1,6 +1,6 @@
 /* Manages interpreters for GDB, the GNU debugger.
 
-   Copyright (C) 2000-2020 Free Software Foundation, Inc.
+   Copyright (C) 2000-2021 Free Software Foundation, Inc.
 
    Written by Jim Ingham <jingham@apple.com> of Apple Computer, Inc.
 
@@ -32,12 +32,11 @@
 #include "defs.h"
 #include "gdbcmd.h"
 #include "ui-out.h"
-#include "event-loop.h"
+#include "gdbsupport/event-loop.h"
 #include "event-top.h"
 #include "interps.h"
 #include "completer.h"
 #include "top.h"		/* For command_loop.  */
-#include "continuations.h"
 #include "main.h"
 
 /* Each UI has its own independent set of interpreters.  */
@@ -370,6 +369,14 @@ interpreter_exec_cmd (const char *args, int from_tty)
   unsigned int nrules;
   unsigned int i;
 
+  /* Interpreters may clobber stdout/stderr (e.g.  in mi_interp::resume at time
+     of writing), preserve their state here.  */
+  scoped_restore save_stdout = make_scoped_restore (&gdb_stdout);
+  scoped_restore save_stderr = make_scoped_restore (&gdb_stderr);
+  scoped_restore save_stdlog = make_scoped_restore (&gdb_stdlog);
+  scoped_restore save_stdtarg = make_scoped_restore (&gdb_stdtarg);
+  scoped_restore save_stdtargerr = make_scoped_restore (&gdb_stdtargerr);
+
   if (args == NULL)
     error_no_arg (_("interpreter-exec command"));
 
@@ -439,8 +446,9 @@ current_interpreter (void)
 }
 
 /* This just adds the "interpreter-exec" command.  */
+void _initialize_interpreter ();
 void
-_initialize_interpreter (void)
+_initialize_interpreter ()
 {
   struct cmd_list_element *c;
 

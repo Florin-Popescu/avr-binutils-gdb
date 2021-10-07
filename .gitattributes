@@ -1,9 +1,20 @@
-# Set the default behavior, in case people don't have core.autocrlf set.
-* text eol=lf
+# -*- conf -*-
 
-# Explicitly declare text files you want to always be normalized and converted
-# to native line endings on checkout.
+## Set merge driver for ChangeLog files 
+# See gnulib's lib/git-merge-changelog.c (or git-merge-changelog(1))
+# for per-user setup instructions.
+#
+# The short version of this (optional) procedure is:
+# 
+# (1) Install git-merge-changelog (this is the tricky part!)
+#
+# (2) Add something like the following to your ~/.gitconfig:
+#
+# [merge "merge-changelog"]
+#         name = GNU-style ChangeLog merge driver
+#         driver = git-merge-changelog %O %A %B
+#
+# (3) Enjoy mostly effortless ChangeLog merges, at least until the
+#     file gets renamed again ...
 
-# Declare files that will always have CRLF line endings on checkout.
-
-# Denote all files that are truly binary and should not be modified.
+ChangeLog       merge=merge-changelog

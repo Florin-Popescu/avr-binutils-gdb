@@ -1,6 +1,6 @@
 /* Definitions for symbol file management in GDB.
 
-   Copyright (C) 1992-2020 Free Software Foundation, Inc.
+   Copyright (C) 1992-2021 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -28,12 +28,17 @@
 #include "registry.h"
 #include "gdb_bfd.h"
 #include "psymtab.h"
+#include <atomic>
 #include <bitset>
 #include <vector>
 #include "gdbsupport/next-iterator.h"
 #include "gdbsupport/safe-iterator.h"
 #include "bcache.h"
 #include "gdbarch.h"
+#include "gdbsupport/refcounted-object.h"
+#include "jit.h"
+#include "quick-symbol.h"
+#include <forward_list>
 
 struct htab;
 struct objfile_data;
@@ -122,36 +127,36 @@ struct entry_info
   unsigned initialized : 1;
 };
 
-/* Sections in an objfile.  The section offsets are stored in the
-   OBJFILE.  */
+#define ALL_OBJFILE_OSECTIONS(objfile, osect)	\
+  for (osect = objfile->sections; osect < objfile->sections_end; osect++) \
+    if (osect->the_bfd_section == NULL)					\
+      {									\
+	/* Nothing.  */							\
+      }									\
+    else
 
-struct obj_section
-{
-  /* BFD section pointer */
-  struct bfd_section *the_bfd_section;
+#define SECT_OFF_DATA(objfile) \
+     ((objfile->sect_index_data == -1) \
+      ? (internal_error (__FILE__, __LINE__, \
+			 _("sect_index_data not initialized")), -1)	\
+      : objfile->sect_index_data)
 
-  /* Objfile this section is part of.  */
-  struct objfile *objfile;
+#define SECT_OFF_RODATA(objfile) \
+     ((objfile->sect_index_rodata == -1) \
+      ? (internal_error (__FILE__, __LINE__, \
+			 _("sect_index_rodata not initialized")), -1)	\
+      : objfile->sect_index_rodata)
 
-  /* True if this "overlay section" is mapped into an "overlay region".  */
-  int ovly_mapped;
-};
+#define SECT_OFF_TEXT(objfile) \
+     ((objfile->sect_index_text == -1) \
+      ? (internal_error (__FILE__, __LINE__, \
+			 _("sect_index_text not initialized")), -1)	\
+      : objfile->sect_index_text)
 
-/* Relocation offset applied to S.  */
-#define obj_section_offset(s)						\
-  (((s)->objfile->section_offsets)->offsets[gdb_bfd_section_index ((s)->objfile->obfd, (s)->the_bfd_section)])
-
-/* The memory address of section S (vma + offset).  */
-#define obj_section_addr(s)				      		\
-  (bfd_section_vma (s->the_bfd_section)					\
-   + obj_section_offset (s))
-
-/* The one-passed-the-end memory address of section S
-   (vma + size + offset).  */
-#define obj_section_endaddr(s)						\
-  (bfd_section_vma (s->the_bfd_section)					\
-   + bfd_section_size ((s)->the_bfd_section)				\
-   + obj_section_offset (s))
+/* Sometimes the .bss section is missing from the objfile, so we don't
+   want to die here.  Let the users of SECT_OFF_BSS deal with an
+   uninitialized section index.  */
+#define SECT_OFF_BSS(objfile) (objfile)->sect_index_bss
 
 /* The "objstats" structure provides a place for gdb to record some
    interesting information about its internal state at runtime, on a
@@ -160,9 +165,6 @@ struct obj_section
 
 struct objstats
 {
-  /* Number of partial symbols read.  */
-  int n_psyms = 0;
-
   /* Number of full symbols read.  */
   int n_syms = 0;
 
@@ -179,7 +181,6 @@ struct objstats
 #define OBJSTAT(objfile, expr) (objfile -> stats.expr)
 #define OBJSTATS struct objstats stats
 extern void print_objfile_statistics (void);
-extern void print_symbol_bcache_statistics (void);
 
 /* Number of entries in the minimal symbol hash table.  */
 #define MINIMAL_SYMBOL_HASH_SIZE 2039
@@ -232,23 +233,43 @@ private:
 
 struct objfile_per_bfd_storage
 {
-  objfile_per_bfd_storage ()
-    : minsyms_read (false)
+  objfile_per_bfd_storage (bfd *bfd)
+    : minsyms_read (false), m_bfd (bfd)
   {}
 
   ~objfile_per_bfd_storage ();
+
+  /* Intern STRING in this object's string cache and return the unique copy.
+     The copy has the same lifetime as this object.
+
+     STRING must be null-terminated.  */
+
+  const char *intern (const char *str)
+  {
+    return (const char *) string_cache.insert (str, strlen (str) + 1);
+  }
+
+  /* Same as the above, but for an std::string.  */
+
+  const char *intern (const std::string &str)
+  {
+    return (const char *) string_cache.insert (str.c_str (), str.size () + 1);
+  }
+
+  /* Get the BFD this object is associated to.  */
+
+  bfd *get_bfd () const
+  {
+    return m_bfd;
+  }
 
   /* The storage has an obstack of its own.  */
 
   auto_obstack storage_obstack;
 
-  /* Byte cache for file names.  */
+  /* String cache.  */
 
-  gdb::bcache filename_cache;
-
-  /* Byte cache for macros.  */
-
-  gdb::bcache macro_cache;
+  gdb::bcache string_cache;
 
   /* The gdbarch associated with the BFD.  Note that this gdbarch is
      determined solely from BFD information, without looking at target
@@ -319,6 +340,11 @@ struct objfile_per_bfd_storage
   /* All the different languages of symbols found in the demangled
      hash table.  */
   std::bitset<nr_languages> demangled_hash_languages;
+
+private:
+  /* The BFD this object is associated to.  */
+
+  bfd *m_bfd;
 };
 
 /* An iterator that first returns a parent objfile, and then each
@@ -354,29 +380,7 @@ private:
 
 /* A range adapter wrapping separate_debug_iterator.  */
 
-class separate_debug_range
-{
-public:
-
-  explicit separate_debug_range (struct objfile *objfile)
-    : m_objfile (objfile)
-  {
-  }
-
-  separate_debug_iterator begin ()
-  {
-    return separate_debug_iterator (m_objfile);
-  }
-
-  separate_debug_iterator end ()
-  {
-    return separate_debug_iterator (nullptr);
-  }
-
-private:
-
-  struct objfile *m_objfile;
-};
+typedef iterator_range<separate_debug_iterator> separate_debug_range;
 
 /* Master structure for keeping track of each file from which
    gdb reads symbols.  There are several ways these get allocated: 1.
@@ -388,78 +392,59 @@ private:
 
    GDB typically reads symbols twice -- first an initial scan which just
    reads "partial symbols"; these are partial information for the
-   static/global symbols in a symbol file.  When later looking up symbols,
-   objfile->sf->qf->lookup_symbol is used to check if we only have a partial
+   static/global symbols in a symbol file.  When later looking up
+   symbols, lookup_symbol is used to check if we only have a partial
    symbol and if so, read and expand the full compunit.  */
 
 struct objfile
 {
+private:
+
+  /* The only way to create an objfile is to call objfile::make.  */
   objfile (bfd *, const char *, objfile_flags);
+
+public:
+
+  /* Normally you should not call delete.  Instead, call 'unlink' to
+     remove it from the program space's list.  In some cases, you may
+     need to hold a reference to an objfile that is independent of its
+     existence on the program space's list; for this case, the
+     destructor must be public so that shared_ptr can reference
+     it.  */
   ~objfile ();
+
+  /* Create an objfile.  */
+  static objfile *make (bfd *bfd_, const char *name_, objfile_flags flags_,
+			objfile *parent = nullptr);
+
+  /* Remove an objfile from the current program space, and free
+     it.  */
+  void unlink ();
 
   DISABLE_COPY_AND_ASSIGN (objfile);
 
   /* A range adapter that makes it possible to iterate over all
-     psymtabs in one objfile.  */
-
-  psymtab_storage::partial_symtab_range psymtabs ()
-  {
-    return partial_symtabs->range ();
-  }
-
-  /* Reset the storage for the partial symbol tables.  */
-
-  void reset_psymtabs ()
-  {
-    psymbol_map.clear ();
-    partial_symtabs.reset (new psymtab_storage ());
-  }
-
-  typedef next_adapter<struct compunit_symtab> compunits_range;
-
-  /* A range adapter that makes it possible to iterate over all
      compunits in one objfile.  */
 
-  compunits_range compunits ()
+  compunit_symtab_range compunits ()
   {
-    return compunits_range (compunit_symtabs);
+    return compunit_symtab_range (compunit_symtabs);
   }
 
   /* A range adapter that makes it possible to iterate over all
      minimal symbols of an objfile.  */
 
-  class msymbols_range
-  {
-  public:
-
-    explicit msymbols_range (struct objfile *objfile)
-      : m_objfile (objfile)
-    {
-    }
-
-    minimal_symbol_iterator begin () const
-    {
-      return minimal_symbol_iterator (m_objfile->per_bfd->msymbols.get ());
-    }
-
-    minimal_symbol_iterator end () const
-    {
-      return minimal_symbol_iterator
-	(m_objfile->per_bfd->msymbols.get ()
-	 + m_objfile->per_bfd->minimal_symbol_count);
-    }
-
-  private:
-
-    struct objfile *m_objfile;
-  };
+  typedef iterator_range<minimal_symbol_iterator> msymbols_range;
 
   /* Return a range adapter for iterating over all minimal
      symbols.  */
 
   msymbols_range msymbols ()
   {
-    return msymbols_range (this);
+    auto start = minimal_symbol_iterator (per_bfd->msymbols.get ());
+    auto end = minimal_symbol_iterator (per_bfd->msymbols.get ()
+					+ per_bfd->minimal_symbol_count);
+    return msymbols_range (start, end);
   }
 
   /* Return a range adapter for iterating over all the separate debug
@@ -467,15 +452,165 @@ struct objfile
 
   separate_debug_range separate_debug_objfiles ()
   {
-    return separate_debug_range (this);
+    auto start = separate_debug_iterator (this);
+    auto end = separate_debug_iterator (nullptr);
+    return separate_debug_range (start, end);
   }
 
+  CORE_ADDR text_section_offset () const
+  {
+    return section_offsets[SECT_OFF_TEXT (this)];
+  }
 
-  /* All struct objfile's are chained together by their next pointers.
-     The program space field "objfiles"  (frequently referenced via
-     the macro "object_files") points to the first link in this chain.  */
+  CORE_ADDR data_section_offset () const
+  {
+    return section_offsets[SECT_OFF_DATA (this)];
+  }
 
-  struct objfile *next = nullptr;
+  /* Intern STRING and return the unique copy.  The copy has the same
+     lifetime as the per-BFD object.  */
+  const char *intern (const char *str)
+  {
+    return per_bfd->intern (str);
+  }
+
+  /* Intern STRING and return the unique copy.  The copy has the same
+     lifetime as the per-BFD object.  */
+  const char *intern (const std::string &str)
+  {
+    return per_bfd->intern (str);
+  }
+
+  /* Retrieve the gdbarch associated with this objfile.  */
+  struct gdbarch *arch () const
+  {
+    return per_bfd->gdbarch;
+  }
+
+  /* Return true if OBJFILE has partial symbols.  */
+
+  bool has_partial_symbols ();
+
+  /* Return true if this objfile has any unexpanded symbols.  A return
+     value of false indicates either, that this objfile has all its
+     symbols fully expanded (i.e. fully read in), or that this objfile has
+     no symbols at all (i.e. no debug information).  */
+  bool has_unexpanded_symtabs ();
+
+  /* See quick_symbol_functions.  */
+  struct symtab *find_last_source_symtab ();
+
+  /* See quick_symbol_functions.  */
+  void forget_cached_source_info ();
+
+  /* Expand and iterate over each "partial" symbol table in OBJFILE
+     where the source file is named NAME.
+
+     If NAME is not absolute, a match after a '/' in the symbol table's
+     file name will also work, REAL_PATH is NULL then.  If NAME is
+     absolute then REAL_PATH is non-NULL absolute file name as resolved
+     via gdb_realpath from NAME.
+
+     If a match is found, the "partial" symbol table is expanded.
+     Then, this calls iterate_over_some_symtabs (or equivalent) over
+     all newly-created symbol tables, passing CALLBACK to it.
+     The result of this call is returned.  */
+  bool map_symtabs_matching_filename
+    (const char *name, const char *real_path,
+     gdb::function_view<bool (symtab *)> callback);
+
+  /* Check to see if the symbol is defined in a "partial" symbol table
+     of this objfile.  BLOCK_INDEX should be either GLOBAL_BLOCK or
+     STATIC_BLOCK, depending on whether we want to search global
+     symbols or static symbols.  NAME is the name of the symbol to
+     look for.  DOMAIN indicates what sort of symbol to search for.
+
+     Returns the newly-expanded compunit in which the symbol is
+     defined, or NULL if no such symbol table exists.  If OBJFILE
+     contains !TYPE_OPAQUE symbol prefer its compunit.  If it contains
+     only TYPE_OPAQUE symbol(s), return at least that compunit.  */
+  struct compunit_symtab *lookup_symbol (block_enum kind, const char *name,
+					 domain_enum domain);
+
+  /* See quick_symbol_functions.  */
+  void print_stats (bool print_bcache);
+
+  /* See quick_symbol_functions.  */
+  void dump ();
+
+  /* Find all the symbols in OBJFILE named FUNC_NAME, and ensure that
+     the corresponding symbol tables are loaded.  */
+  void expand_symtabs_for_function (const char *func_name);
+
+  /* See quick_symbol_functions.  */
+  void expand_all_symtabs ();
+
+  /* Read all symbol tables associated with OBJFILE which have
+     symtab_to_fullname equal to FULLNAME.
+     This is for the purposes of examining code only, e.g., expand_line_sal.
+     The routine may ignore debug info that is known to not be useful with
+     code, e.g., DW_TAG_type_unit for dwarf debug info.  */
+  void expand_symtabs_with_fullname (const char *fullname);
+
+  /* See quick_symbol_functions.  */
+  void expand_matching_symbols
+    (const lookup_name_info &name, domain_enum domain,
+     int global,
+     symbol_compare_ftype *ordered_compare);
+
+  /* See quick_symbol_functions.  */
+  bool expand_symtabs_matching
+    (gdb::function_view<expand_symtabs_file_matcher_ftype> file_matcher,
+     const lookup_name_info *lookup_name,
+     gdb::function_view<expand_symtabs_symbol_matcher_ftype> symbol_matcher,
+     gdb::function_view<expand_symtabs_exp_notify_ftype> expansion_notify,
+     block_search_flags search_flags,
+     domain_enum domain,
+     enum search_domain kind);
+
+  /* See quick_symbol_functions.  */
+  struct compunit_symtab *find_pc_sect_compunit_symtab
+    (struct bound_minimal_symbol msymbol,
+     CORE_ADDR pc,
+     struct obj_section *section,
+     int warn_if_readin);
+
+  /* See quick_symbol_functions.  */
+  void map_symbol_filenames (gdb::function_view<symbol_filename_ftype> fun,
+			     bool need_fullname);
+
+  /* See quick_symbol_functions.  */
+  struct compunit_symtab *find_compunit_symtab_by_address (CORE_ADDR address);
+
+  /* See quick_symbol_functions.  */
+  enum language lookup_global_symbol_language (const char *name,
+					       domain_enum domain,
+					       bool *symbol_found_p);
+
+  /* See quick_symbol_functions.  */
+  void require_partial_symbols (bool verbose);
+
+  /* Return the relocation offset applied to SECTION.  */
+  CORE_ADDR section_offset (bfd_section *section) const
+  {
+    /* The section's owner can be nullptr if it is one of the _bfd_std_section
+       section.  */
+    gdb_assert (section->owner == nullptr || section->owner == this->obfd);
+
+    int idx = gdb_bfd_section_index (this->obfd, section);
+    return this->section_offsets[idx];
+  }
+
+  /* Set the relocation offset applied to SECTION.  */
+  void set_section_offset (bfd_section *section, CORE_ADDR offset)
+  {
+    /* The section's owner can be nullptr if it is one of the _bfd_std_section
+       section.  */
+    gdb_assert (section->owner == nullptr || section->owner == this->obfd);
+
+    int idx = gdb_bfd_section_index (this->obfd, section);
+    this->section_offsets[idx] = offset;
+  }
 
   /* The object file's original name as specified by the user,
      made absolute, and tilde-expanded.  However, it is not canonicalized
@@ -500,10 +635,6 @@ struct objfile
 
   struct compunit_symtab *compunit_symtabs = nullptr;
 
-  /* The partial symbol tables.  */
-
-  std::shared_ptr<psymtab_storage> partial_symtabs;
-
   /* The object file's BFD.  Can be null if the objfile contains only
      minimal symbols, e.g. the run time common symbols for SunOS4.  */
 
@@ -524,11 +655,6 @@ struct objfile
 
   struct obstack objfile_obstack {};
 
-  /* Map symbol addresses to the partial symtab that defines the
-     object at that address.  */
-
-  std::vector<std::pair<CORE_ADDR, partial_symtab *>> psymbol_map;
-
   /* Structure which keeps track of functions that manipulate objfile's
      of the same type as this objfile.  I.e. the function to read partial
      symbols for example.  Note that this structure is in statically
@@ -537,6 +663,10 @@ struct objfile
 
   const struct sym_fns *sf = nullptr;
 
+  /* The "quick" (aka partial) symbol functions for this symbol
+     reader.  */
+  std::forward_list<quick_symbol_functions_up> qf;
+
   /* Per objfile data-pointers required by other GDB modules.  */
 
   REGISTRY_FIELDS {};
@@ -544,14 +674,12 @@ struct objfile
   /* Set of relocation offsets to apply to each section.
      The table is indexed by the_bfd_section->index, thus it is generally
      as large as the number of sections in the binary.
-     The table is stored on the objfile_obstack.
 
      These offsets indicate that all symbols (including partial and
      minimal symbols) which have been read have been relocated by this
      much.  Symbols which are yet to be read need to be relocated by it.  */
 
-  struct section_offsets *section_offsets = nullptr;
-  int num_sections = 0;
+  ::section_offsets section_offsets;
 
   /* Indexes in the section_offsets array.  These are initialized by the
      *_symfile_offsets() family of functions (som_symfile_offsets,
@@ -625,11 +753,78 @@ struct objfile
      store these here rather than in struct block.  Static links must be
      allocated on the objfile's obstack.  */
   htab_up static_links;
+
+  /* JIT-related data for this objfile, if the objfile is a JITer;
+     that is, it produces JITed objfiles.  */
+  std::unique_ptr<jiter_objfile_data> jiter_data = nullptr;
+
+  /* JIT-related data for this objfile, if the objfile is JITed;
+     that is, it was produced by a JITer.  */
+  std::unique_ptr<jited_objfile_data> jited_data = nullptr;
+
+  /* A flag that is set to true if the JIT interface symbols are not
+     found in this objfile, so that we can skip the symbol lookup the
+     next time.  If an objfile does not have the symbols, it will
+     never have them.  */
+  bool skip_jit_symbol_lookup = false;
+};
+
+/* A deleter for objfile.  */
+
+struct objfile_deleter
+{
+  void operator() (objfile *ptr) const
+  {
+    ptr->unlink ();
+  }
+};
+
+/* A unique pointer that holds an objfile.  */
+
+typedef std::unique_ptr<objfile, objfile_deleter> objfile_up;
+
+
+/* Sections in an objfile.  The section offsets are stored in the
+   OBJFILE.  */
+
+struct obj_section
+{
+  /* Relocation offset applied to the section.  */
+  CORE_ADDR offset () const
+  {
+    return this->objfile->section_offset (this->the_bfd_section);
+  }
+
+  /* Set the relocation offset applied to the section.  */
+  void set_offset (CORE_ADDR offset)
+  {
+    this->objfile->set_section_offset (this->the_bfd_section, offset);
+  }
+
+  /* The memory address of the section (vma + offset).  */
+  CORE_ADDR addr () const
+  {
+    return bfd_section_vma (this->the_bfd_section) + this->offset ();
+  }
+
+  /* The one-passed-the-end memory address of the section
+     (vma + size + offset).  */
+  CORE_ADDR endaddr () const
+  {
+    return this->addr () + bfd_section_size (this->the_bfd_section);
+  }
+
+  /* BFD section pointer */
+  struct bfd_section *the_bfd_section;
+
+  /* Objfile this section is part of.  */
+  struct objfile *objfile;
+
+  /* True if this "overlay section" is mapped into an "overlay region".  */
+  int ovly_mapped;
 };
 
 /* Declarations for functions defined in objfiles.c */
-
-extern struct gdbarch *get_objfile_arch (const struct objfile *);
 
 extern int entry_point_address_query (CORE_ADDR *entry_p);
 
@@ -637,16 +832,10 @@ extern CORE_ADDR entry_point_address (void);
 
 extern void build_objfile_section_table (struct objfile *);
 
-extern void add_separate_debug_objfile (struct objfile *, struct objfile *);
-
 extern void free_objfile_separate_debug (struct objfile *);
 
-extern void free_all_objfiles (void);
-
-extern void objfile_relocate (struct objfile *, const struct section_offsets *);
+extern void objfile_relocate (struct objfile *, const section_offsets &);
 extern void objfile_rebase (struct objfile *, CORE_ADDR);
-
-extern int objfile_has_partial_symbols (struct objfile *objfile);
 
 extern int objfile_has_full_symbols (struct objfile *objfile);
 
@@ -661,13 +850,16 @@ extern void objfile_set_sym_fns (struct objfile *objfile,
 
 extern void objfiles_changed (void);
 
-extern int is_addr_in_objfile (CORE_ADDR addr, const struct objfile *objfile);
+/* Return true if ADDR maps into one of the sections of OBJFILE and false
+   otherwise.  */
+
+extern bool is_addr_in_objfile (CORE_ADDR addr, const struct objfile *objfile);
 
 /* Return true if ADDRESS maps into one of the sections of a
    OBJF_SHARED objfile of PSPACE and false otherwise.  */
 
-extern int shared_objfile_contains_address_p (struct program_space *pspace,
-					      CORE_ADDR address);
+extern bool shared_objfile_contains_address_p (struct program_space *pspace,
+					       CORE_ADDR address);
 
 /* This operation deletes all objfile entries that represent solibs that
    weren't explicitly loaded by the user, via e.g., the add-symbol-file
@@ -691,7 +883,8 @@ extern int pc_in_section (CORE_ADDR, const char *);
 static inline int
 in_plt_section (CORE_ADDR pc)
 {
-  return pc_in_section (pc, ".plt");
+  return (pc_in_section (pc, ".plt")
+	  || pc_in_section (pc, ".plt.sec"));
 }
 
 /* Keep a registry of per-objfile data-pointers required by other GDB
@@ -713,42 +906,6 @@ extern void default_iterate_over_objfiles_in_search_order
   (struct gdbarch *gdbarch,
    iterate_over_objfiles_in_search_order_cb_ftype *cb,
    void *cb_data, struct objfile *current_objfile);
-
-
-#define ALL_OBJFILE_OSECTIONS(objfile, osect)	\
-  for (osect = objfile->sections; osect < objfile->sections_end; osect++) \
-    if (osect->the_bfd_section == NULL)					\
-      {									\
-	/* Nothing.  */							\
-      }									\
-    else
-
-#define SECT_OFF_DATA(objfile) \
-     ((objfile->sect_index_data == -1) \
-      ? (internal_error (__FILE__, __LINE__, \
-			 _("sect_index_data not initialized")), -1)	\
-      : objfile->sect_index_data)
-
-#define SECT_OFF_RODATA(objfile) \
-     ((objfile->sect_index_rodata == -1) \
-      ? (internal_error (__FILE__, __LINE__, \
-			 _("sect_index_rodata not initialized")), -1)	\
-      : objfile->sect_index_rodata)
-
-#define SECT_OFF_TEXT(objfile) \
-     ((objfile->sect_index_text == -1) \
-      ? (internal_error (__FILE__, __LINE__, \
-			 _("sect_index_text not initialized")), -1)	\
-      : objfile->sect_index_text)
-
-/* Sometimes the .bss section is missing from the objfile, so we don't
-   want to die here.  Let the users of SECT_OFF_BSS deal with an
-   uninitialized section index.  */
-#define SECT_OFF_BSS(objfile) (objfile)->sect_index_bss
-
-/* Answer whether there is more than one object file loaded.  */
-
-#define MULTI_OBJFILE_P() (object_files && object_files->next)
 
 /* Reset the per-BFD storage area on OBJ.  */
 

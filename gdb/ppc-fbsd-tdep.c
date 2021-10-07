@@ -1,6 +1,6 @@
 /* Target-dependent code for PowerPC systems running FreeBSD.
 
-   Copyright (C) 2013-2020 Free Software Foundation, Inc.
+   Copyright (C) 2013-2021 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -35,6 +35,7 @@
 #include "ppc-fbsd-tdep.h"
 #include "fbsd-tdep.h"
 #include "solib-svr4.h"
+#include "inferior.h"
 
 
 /* 32-bit regset descriptions.  */
@@ -175,7 +176,7 @@ ppcfbsd_sigtramp_frame_sniffer (const struct frame_unwind *self,
       unsigned long insn;
 
       if (!safe_frame_unwind_memory (this_frame, start_pc + *offset,
-				     buf, sizeof buf))
+				     {buf, sizeof buf}))
 	continue;
 
       /* Check for "li r0,SYS_sigreturn".  */
@@ -213,7 +214,7 @@ ppcfbsd_sigtramp_frame_cache (struct frame_info *this_frame, void **this_cache)
 
   func = get_frame_pc (this_frame);
   func &= ~(ppcfbsd_page_size - 1);
-  if (!safe_frame_unwind_memory (this_frame, func, buf, sizeof buf))
+  if (!safe_frame_unwind_memory (this_frame, func, {buf, sizeof buf}))
     return cache;
 
   base = get_frame_register_unsigned (this_frame, gdbarch_sp_regnum (gdbarch));
@@ -262,6 +263,7 @@ ppcfbsd_sigtramp_frame_prev_register (struct frame_info *this_frame,
 }
 
 static const struct frame_unwind ppcfbsd_sigtramp_frame_unwind = {
+  "ppc freebsd sigtramp",
   SIGTRAMP_FRAME,
   default_frame_unwind_stop_reason,
   ppcfbsd_sigtramp_frame_this_id,
@@ -289,7 +291,8 @@ ppcfbsd_get_thread_local_address (struct gdbarch *gdbarch, ptid_t ptid,
   struct regcache *regcache;
   int tp_offset, tp_regnum;
 
-  regcache = get_thread_arch_regcache (ptid, gdbarch);
+  regcache = get_thread_arch_regcache (current_inferior ()->process_target (),
+				       ptid, gdbarch);
 
   if (tdep->wordsize == 4)
     {
@@ -359,8 +362,9 @@ ppcfbsd_init_abi (struct gdbarch_info info, struct gdbarch *gdbarch)
 					ppcfbsd_get_thread_local_address);
 }
 
+void _initialize_ppcfbsd_tdep ();
 void
-_initialize_ppcfbsd_tdep (void)
+_initialize_ppcfbsd_tdep ()
 {
   gdbarch_register_osabi (bfd_arch_powerpc, bfd_mach_ppc, GDB_OSABI_FREEBSD,
 			  ppcfbsd_init_abi);

@@ -1,6 +1,6 @@
 /* Python pretty-printing
 
-   Copyright (C) 2008-2020 Free Software Foundation, Inc.
+   Copyright (C) 2008-2021 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -318,8 +318,8 @@ print_string_repr (PyObject *printer, const char *hint,
 	      type = builtin_type (gdbarch)->builtin_char;
 
 	      if (hint && !strcmp (hint, "string"))
-		LA_PRINT_STRING (stream, type, (gdb_byte *) output,
-				 length, NULL, 0, options);
+		language->printstr (stream, type, (gdb_byte *) output,
+				    length, NULL, 0, options);
 	      else
 		fputs_filtered (output, stream);
 	    }
@@ -431,21 +431,28 @@ print_children (PyObject *printer, const char *hint,
 	  continue;
 	}
 
-      /* Print initial "{".  For other elements, there are three
-	 cases:
+      /* Print initial "=" to separate print_string_repr output and
+	 children.  For other elements, there are three cases:
 	 1. Maps.  Print a "," after each value element.
 	 2. Arrays.  Always print a ",".
 	 3. Other.  Always print a ",".  */
       if (i == 0)
 	{
-         if (is_py_none)
-           fputs_filtered ("{", stream);
-         else
-           fputs_filtered (" = {", stream);
-       }
-
+	  if (!is_py_none)
+	    fputs_filtered (" = ", stream);
+	}
       else if (! is_map || i % 2 == 0)
 	fputs_filtered (pretty ? "," : ", ", stream);
+
+      /* Skip printing children if max_depth has been reached.  This check
+	 is performed after print_string_repr and the "=" separator so that
+	 these steps are not skipped if the variable is located within the
+	 permitted depth.  */
+      if (val_print_check_max_depth (stream, recurse, options, language))
+	return;
+      else if (i == 0)
+	/* Print initial "{" to bookend children.  */
+	fputs_filtered ("{", stream);
 
       /* In summary mode, we just want to print "= {...}" if there is
 	 a value.  */
@@ -558,22 +565,20 @@ print_children (PyObject *printer, const char *hint,
 
 enum ext_lang_rc
 gdbpy_apply_val_pretty_printer (const struct extension_language_defn *extlang,
-				struct type *type,
-				LONGEST embedded_offset, CORE_ADDR address,
+				struct value *value,
 				struct ui_file *stream, int recurse,
-				struct value *val,
 				const struct value_print_options *options,
 				const struct language_defn *language)
 {
-  struct gdbarch *gdbarch = get_type_arch (type);
-  struct value *value;
+  struct type *type = value_type (value);
+  struct gdbarch *gdbarch = type->arch ();
   enum string_repr_result print_result;
 
-  if (value_lazy (val))
-    value_fetch_lazy (val);
+  if (value_lazy (value))
+    value_fetch_lazy (value);
 
   /* No pretty-printer support for unavailable values.  */
-  if (!value_bytes_available (val, embedded_offset, TYPE_LENGTH (type)))
+  if (!value_bytes_available (value, 0, TYPE_LENGTH (type)))
     return EXT_LANG_RC_NOP;
 
   if (!gdb_python_initialized)
@@ -581,10 +586,7 @@ gdbpy_apply_val_pretty_printer (const struct extension_language_defn *extlang,
 
   gdbpy_enter enter_py (gdbarch, language);
 
-  /* Instantiate the printer.  */
-  value = value_from_component (val, type, embedded_offset);
-
-  gdbpy_ref<> val_obj (value_to_value_object (value));
+  gdbpy_ref<> val_obj (value_to_value_object_no_release (value));
   if (val_obj == NULL)
     {
       print_stack_unless_memory_error (stream);
@@ -601,9 +603,6 @@ gdbpy_apply_val_pretty_printer (const struct extension_language_defn *extlang,
 
   if (printer == Py_None)
     return EXT_LANG_RC_NOP;
-
-  if (val_print_check_max_depth (stream, recurse, options, language))
-    return EXT_LANG_RC_OK;
 
   /* If we are printing a map, we want some special formatting.  */
   gdb::unique_xmalloc_ptr<char> hint (gdbpy_get_display_hint (printer.get ()));

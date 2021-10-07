@@ -1,6 +1,6 @@
 #! /bin/sh
 
-# Copyright (C) 2011-2020 Free Software Foundation, Inc.
+# Copyright (C) 2011-2021 Free Software Foundation, Inc.
 #
 # This file is part of GDB.
 #
@@ -30,35 +30,51 @@
 
 # The list of gnulib modules we are importing in GDB.
 IMPORTED_GNULIB_MODULES="\
+    accept \
     alloca \
+    bind \
     canonicalize-lgpl \
+    chown \
+    connect \
+    count-one-bits \
     dirent \
     dirfd \
     errno \
+    ffs \
     fnmatch-gnu \
     frexpl \
+    gendocs \
     getcwd \
+    getline \
+    gettimeofday \
+    gitlog-to-changelog \
     glob \
     inet_ntop
     inttypes \
     lstat \
     limits-h \
+    listen \
     memchr \
     memmem \
     mkdir \
     mkdtemp \
     mkostemp \
+    netdb \
     pathmax \
     rawmemchr \
     readlink \
     rename \
+    select \
     setenv \
+    setsockopt \
     signal-h \
+    socket \
     strchrnul \
     strerror_r-posix \
     strstr \
     strtok_r \
     sys_stat \
+    sys_wait \
     time_r \
     unistd \
     unsetenv \
@@ -68,7 +84,7 @@ IMPORTED_GNULIB_MODULES="\
 "
 
 # The gnulib commit ID to use for the update.
-GNULIB_COMMIT_SHA1="38237baf99386101934cd93278023aa4ae523ec0"
+GNULIB_COMMIT_SHA1="776af40e09b476a41073131a90022572f448c189"
 
 # The expected version number for the various auto tools we will
 # use after the import.
@@ -164,16 +180,14 @@ fi
 # Apply our local patches.
 apply_patches ()
 {
-    patch -p3 -f -i "$1"
+    patch -p2 -f -i "$1"
     if [ $? -ne 0 ]; then
         echo "Failed to apply some patches.  Aborting."
         exit 1
     fi
 }
 
-apply_patches "patches/0001-Fix-PR-gdb-23558-Use-system-s-getcwd-when-cross-comp.patch"
-apply_patches "patches/0002-mkostemp-mkostemps-Fix-compilation-error-in-C-mode-o.patch"
-apply_patches "patches/0003-Fix-glob-c-Coverity-issues.patch"
+apply_patches "patches/0001-use-windows-stat"
 
 # Regenerate all necessary files...
 aclocal &&

@@ -1,6 +1,6 @@
 /* MI Interpreter Definitions and Commands for GDB, the GNU debugger.
 
-   Copyright (C) 2002-2020 Free Software Foundation, Inc.
+   Copyright (C) 2002-2021 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -23,7 +23,7 @@
 
 #include "interps.h"
 #include "event-top.h"
-#include "event-loop.h"
+#include "gdbsupport/event-loop.h"
 #include "inferior.h"
 #include "infrun.h"
 #include "ui-out.h"
@@ -91,8 +91,6 @@ static void mi_memory_changed (struct inferior *inf, CORE_ADDR memaddr,
 			       ssize_t len, const bfd_byte *myaddr);
 static void mi_on_sync_execution_done (void);
 
-static int report_initial_inferior (struct inferior *inf, void *closure);
-
 /* Display the MI prompt.  */
 
 static void
@@ -137,12 +135,27 @@ mi_interp::init (bool top_level)
 
   if (top_level)
     {
-      /* The initial inferior is created before this function is
-	 called, so we need to report it explicitly.  Use iteration in
-	 case future version of GDB creates more than one inferior
-	 up-front.  */
-      iterate_over_inferiors (report_initial_inferior, mi);
-    }
+      /* The initial inferior is created before this function is called, so we
+	 need to report it explicitly when initializing the top-level MI
+	 interpreter.
+
+	 This is also called when additional MI interpreters are added (using
+	 the new-ui command), when multiple inferiors possibly exist, so we need
+	 to use iteration to report all the inferiors.  mi_inferior_added can't
+	 be used, because it would print the event on all the other MI UIs.  */
+
+      for (inferior *inf : all_inferiors ())
+	{
+	  target_terminal::scoped_restore_terminal_state term_state;
+	  target_terminal::ours_for_output ();
+
+	  fprintf_unfiltered (mi->event_channel,
+			      "thread-group-added,id=\"i%d\"",
+			      inf->num);
+
+	  gdb_flush (mi->event_channel);
+	}
+  }
 }
 
 void
@@ -718,7 +731,7 @@ mi_traceframe_changed (int tfnum, int tpnum)
 
       if (tfnum >= 0)
 	fprintf_unfiltered (mi->event_channel, "traceframe-changed,"
-			    "num=\"%d\",tracepoint=\"%d\"\n",
+			    "num=\"%d\",tracepoint=\"%d\"",
 			    tfnum, tpnum);
       else
 	fprintf_unfiltered (mi->event_channel, "traceframe-changed,end");
@@ -743,7 +756,7 @@ mi_tsv_created (const struct trace_state_variable *tsv)
       target_terminal::ours_for_output ();
 
       fprintf_unfiltered (mi->event_channel, "tsv-created,"
-			  "name=\"%s\",initial=\"%s\"\n",
+			  "name=\"%s\",initial=\"%s\"",
 			  tsv->name.c_str (), plongest (tsv->initial_value));
 
       gdb_flush (mi->event_channel);
@@ -767,9 +780,9 @@ mi_tsv_deleted (const struct trace_state_variable *tsv)
 
       if (tsv != NULL)
 	fprintf_unfiltered (mi->event_channel, "tsv-deleted,"
-			    "name=\"%s\"\n", tsv->name.c_str ());
+			    "name=\"%s\"", tsv->name.c_str ());
       else
-	fprintf_unfiltered (mi->event_channel, "tsv-deleted\n");
+	fprintf_unfiltered (mi->event_channel, "tsv-deleted");
 
       gdb_flush (mi->event_channel);
     }
@@ -961,7 +974,8 @@ multiple_inferiors_p ()
 }
 
 static void
-mi_on_resume_1 (struct mi_interp *mi, ptid_t ptid)
+mi_on_resume_1 (struct mi_interp *mi,
+		process_stratum_target *targ, ptid_t ptid)
 {
   /* To cater for older frontends, emit ^running, but do it only once
      per each command.  We do it here, since at this point we know
@@ -984,7 +998,7 @@ mi_on_resume_1 (struct mi_interp *mi, ptid_t ptid)
       && !multiple_inferiors_p ())
     fprintf_unfiltered (mi->raw_stdout, "*running,thread-id=\"all\"\n");
   else
-    for (thread_info *tp : all_non_exited_threads (ptid))
+    for (thread_info *tp : all_non_exited_threads (targ, ptid))
       mi_output_running (tp);
 
   if (!running_result_record_printed && mi_proceeded)
@@ -1004,10 +1018,11 @@ mi_on_resume (ptid_t ptid)
 {
   struct thread_info *tp = NULL;
 
+  process_stratum_target *target = current_inferior ()->process_target ();
   if (ptid == minus_one_ptid || ptid.is_pid ())
     tp = inferior_thread ();
   else
-    tp = find_thread_ptid (ptid);
+    tp = find_thread_ptid (target, ptid);
 
   /* Suppress output while calling an inferior function.  */
   if (tp->control.in_infcall)
@@ -1023,7 +1038,7 @@ mi_on_resume (ptid_t ptid)
       target_terminal::scoped_restore_terminal_state term_state;
       target_terminal::ours_for_output ();
 
-      mi_on_resume_1 (mi, ptid);
+      mi_on_resume_1 (mi, target, ptid);
     }
 }
 
@@ -1251,26 +1266,6 @@ mi_user_selected_context_changed (user_selected_what selection)
     }
 }
 
-static int
-report_initial_inferior (struct inferior *inf, void *closure)
-{
-  /* This function is called from mi_interpreter_init, and since
-     mi_inferior_added assumes that inferior is fully initialized
-     and top_level_interpreter_data is set, we cannot call
-     it here.  */
-  struct mi_interp *mi = (struct mi_interp *) closure;
-
-  target_terminal::scoped_restore_terminal_state term_state;
-  target_terminal::ours_for_output ();
-
-  fprintf_unfiltered (mi->event_channel,
-		      "thread-group-added,id=\"i%d\"",
-		      inf->num);
-  gdb_flush (mi->event_channel);
-
-  return 0;
-}
-
 ui_out *
 mi_interp::interp_ui_out ()
 {
@@ -1333,8 +1328,9 @@ mi_interp_factory (const char *name)
   return new mi_interp (name);
 }
 
+void _initialize_mi_interp ();
 void
-_initialize_mi_interp (void)
+_initialize_mi_interp ()
 {
   /* The various interpreter levels.  */
   interp_factory_register (INTERP_MI1, mi_interp_factory);
@@ -1342,33 +1338,40 @@ _initialize_mi_interp (void)
   interp_factory_register (INTERP_MI3, mi_interp_factory);
   interp_factory_register (INTERP_MI, mi_interp_factory);
 
-  gdb::observers::signal_received.attach (mi_on_signal_received);
-  gdb::observers::end_stepping_range.attach (mi_on_end_stepping_range);
-  gdb::observers::signal_exited.attach (mi_on_signal_exited);
-  gdb::observers::exited.attach (mi_on_exited);
-  gdb::observers::no_history.attach (mi_on_no_history);
-  gdb::observers::new_thread.attach (mi_new_thread);
-  gdb::observers::thread_exit.attach (mi_thread_exit);
-  gdb::observers::inferior_added.attach (mi_inferior_added);
-  gdb::observers::inferior_appeared.attach (mi_inferior_appeared);
-  gdb::observers::inferior_exit.attach (mi_inferior_exit);
-  gdb::observers::inferior_removed.attach (mi_inferior_removed);
-  gdb::observers::record_changed.attach (mi_record_changed);
-  gdb::observers::normal_stop.attach (mi_on_normal_stop);
-  gdb::observers::target_resumed.attach (mi_on_resume);
-  gdb::observers::solib_loaded.attach (mi_solib_loaded);
-  gdb::observers::solib_unloaded.attach (mi_solib_unloaded);
-  gdb::observers::about_to_proceed.attach (mi_about_to_proceed);
-  gdb::observers::traceframe_changed.attach (mi_traceframe_changed);
-  gdb::observers::tsv_created.attach (mi_tsv_created);
-  gdb::observers::tsv_deleted.attach (mi_tsv_deleted);
-  gdb::observers::tsv_modified.attach (mi_tsv_modified);
-  gdb::observers::breakpoint_created.attach (mi_breakpoint_created);
-  gdb::observers::breakpoint_deleted.attach (mi_breakpoint_deleted);
-  gdb::observers::breakpoint_modified.attach (mi_breakpoint_modified);
-  gdb::observers::command_param_changed.attach (mi_command_param_changed);
-  gdb::observers::memory_changed.attach (mi_memory_changed);
-  gdb::observers::sync_execution_done.attach (mi_on_sync_execution_done);
+  gdb::observers::signal_received.attach (mi_on_signal_received, "mi-interp");
+  gdb::observers::end_stepping_range.attach (mi_on_end_stepping_range,
+					     "mi-interp");
+  gdb::observers::signal_exited.attach (mi_on_signal_exited, "mi-interp");
+  gdb::observers::exited.attach (mi_on_exited, "mi-interp");
+  gdb::observers::no_history.attach (mi_on_no_history, "mi-interp");
+  gdb::observers::new_thread.attach (mi_new_thread, "mi-interp");
+  gdb::observers::thread_exit.attach (mi_thread_exit, "mi-interp");
+  gdb::observers::inferior_added.attach (mi_inferior_added, "mi-interp");
+  gdb::observers::inferior_appeared.attach (mi_inferior_appeared, "mi-interp");
+  gdb::observers::inferior_exit.attach (mi_inferior_exit, "mi-interp");
+  gdb::observers::inferior_removed.attach (mi_inferior_removed, "mi-interp");
+  gdb::observers::record_changed.attach (mi_record_changed, "mi-interp");
+  gdb::observers::normal_stop.attach (mi_on_normal_stop, "mi-interp");
+  gdb::observers::target_resumed.attach (mi_on_resume, "mi-interp");
+  gdb::observers::solib_loaded.attach (mi_solib_loaded, "mi-interp");
+  gdb::observers::solib_unloaded.attach (mi_solib_unloaded, "mi-interp");
+  gdb::observers::about_to_proceed.attach (mi_about_to_proceed, "mi-interp");
+  gdb::observers::traceframe_changed.attach (mi_traceframe_changed,
+					     "mi-interp");
+  gdb::observers::tsv_created.attach (mi_tsv_created, "mi-interp");
+  gdb::observers::tsv_deleted.attach (mi_tsv_deleted, "mi-interp");
+  gdb::observers::tsv_modified.attach (mi_tsv_modified, "mi-interp");
+  gdb::observers::breakpoint_created.attach (mi_breakpoint_created,
+					     "mi-interp");
+  gdb::observers::breakpoint_deleted.attach (mi_breakpoint_deleted,
+					     "mi-interp");
+  gdb::observers::breakpoint_modified.attach (mi_breakpoint_modified,
+					      "mi-interp");
+  gdb::observers::command_param_changed.attach (mi_command_param_changed,
+						"mi-interp");
+  gdb::observers::memory_changed.attach (mi_memory_changed, "mi-interp");
+  gdb::observers::sync_execution_done.attach (mi_on_sync_execution_done,
+					      "mi-interp");
   gdb::observers::user_selected_context_changed.attach
-    (mi_user_selected_context_changed);
+    (mi_user_selected_context_changed, "mi-interp");
 }

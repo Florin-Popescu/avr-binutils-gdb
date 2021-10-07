@@ -1,6 +1,6 @@
 /* Target-dependent code for FreeBSD/amd64.
 
-   Copyright (C) 2003-2020 Free Software Foundation, Inc.
+   Copyright (C) 2003-2021 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -30,6 +30,7 @@
 #include "amd64-tdep.h"
 #include "fbsd-tdep.h"
 #include "solib-svr4.h"
+#include "inferior.h"
 
 /* Support for signal handlers.  */
 
@@ -51,7 +52,7 @@ amd64fbsd_sigtramp_p (struct frame_info *this_frame)
   CORE_ADDR pc = get_frame_pc (this_frame);
   gdb_byte buf[sizeof amd64fbsd_sigtramp_code];
 
-  if (!safe_frame_unwind_memory (this_frame, pc, buf, sizeof buf))
+  if (!safe_frame_unwind_memory (this_frame, pc, buf))
     return 0;
   if (memcmp (buf, amd64fbsd_sigtramp_code, sizeof amd64fbsd_sigtramp_code)
       != 0)
@@ -212,7 +213,8 @@ amd64fbsd_get_thread_local_address (struct gdbarch *gdbarch, ptid_t ptid,
 {
   struct regcache *regcache;
 
-  regcache = get_thread_arch_regcache (ptid, gdbarch);
+  regcache = get_thread_arch_regcache (current_inferior ()->process_target (),
+				       ptid, gdbarch);
 
   target_fetch_registers (regcache, AMD64_FSBASE_REGNUM);
 
@@ -268,8 +270,9 @@ amd64fbsd_init_abi (struct gdbarch_info info, struct gdbarch *gdbarch)
 					amd64fbsd_get_thread_local_address);
 }
 
+void _initialize_amd64fbsd_tdep ();
 void
-_initialize_amd64fbsd_tdep (void)
+_initialize_amd64fbsd_tdep ()
 {
   gdbarch_register_osabi (bfd_arch_i386, bfd_mach_x86_64,
 			  GDB_OSABI_FREEBSD, amd64fbsd_init_abi);

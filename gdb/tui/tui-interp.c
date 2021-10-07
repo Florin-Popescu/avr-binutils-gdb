@@ -1,6 +1,6 @@
 /* TUI Interpreter definitions for GDB, the GNU debugger.
 
-   Copyright (C) 2003-2020 Free Software Foundation, Inc.
+   Copyright (C) 2003-2021 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -22,7 +22,7 @@
 #include "interps.h"
 #include "top.h"
 #include "event-top.h"
-#include "event-loop.h"
+#include "gdbsupport/event-loop.h"
 #include "ui-out.h"
 #include "cli-out.h"
 #include "tui/tui-data.h"
@@ -35,9 +35,9 @@
 #include "inferior.h"
 #include "main.h"
 
-/* Set to 1 when the TUI mode must be activated when we first start
+/* Set to true when the TUI mode must be activated when we first start
    gdb.  */
-static int tui_start_enabled = 0;
+static bool tui_start_enabled = false;
 
 class tui_interp final : public cli_interp_base
 {
@@ -243,8 +243,29 @@ tui_interp::init (bool top_level)
 
   tui_initialize_io ();
   tui_initialize_win ();
-  if (ui_file_isatty (gdb_stdout))
-    tui_initialize_readline ();
+  if (gdb_stdout->isatty ())
+    tui_ensure_readline_initialized ();
+}
+
+/* Used as the command handler for the tui.  */
+
+static void
+tui_command_line_handler (gdb::unique_xmalloc_ptr<char> &&rl)
+{
+  /* When a tui enabled GDB is running in either tui mode or cli mode then
+     it is always the tui interpreter that is in use.  As a result we end
+     up in here even in standard cli mode.
+
+     We only need to do any special actions when the tui is in use
+     though.  When the tui is active the users return is not echoed to the
+     screen as a result the display will not automatically move us to the
+     next line.  Here we manually insert a newline character and move the
+     cursor.  */
+  if (tui_active)
+    tui_inject_newline_into_command_window ();
+
+  /* Now perform GDB's standard CLI command line handling.  */
+  command_line_handler (std::move (rl));
 }
 
 void
@@ -266,7 +287,7 @@ tui_interp::resume ()
 
   gdb_setup_readline (1);
 
-  ui->input_handler = command_line_handler;
+  ui->input_handler = tui_command_line_handler;
 
   if (stream != NULL)
     tui_old_uiout->set_stream (gdb_stdout);
@@ -306,13 +327,14 @@ tui_interp_factory (const char *name)
   return new tui_interp (name);
 }
 
+void _initialize_tui_interp ();
 void
-_initialize_tui_interp (void)
+_initialize_tui_interp ()
 {
   interp_factory_register (INTERP_TUI, tui_interp_factory);
 
   if (interpreter_p && strcmp (interpreter_p, INTERP_TUI) == 0)
-    tui_start_enabled = 1;
+    tui_start_enabled = true;
 
   if (interpreter_p && strcmp (interpreter_p, INTERP_CONSOLE) == 0)
     {
@@ -321,14 +343,16 @@ _initialize_tui_interp (void)
     }
 
   /* If changing this, remember to update cli-interp.c as well.  */
-  gdb::observers::normal_stop.attach (tui_on_normal_stop);
-  gdb::observers::signal_received.attach (tui_on_signal_received);
-  gdb::observers::end_stepping_range.attach (tui_on_end_stepping_range);
-  gdb::observers::signal_exited.attach (tui_on_signal_exited);
-  gdb::observers::exited.attach (tui_on_exited);
-  gdb::observers::no_history.attach (tui_on_no_history);
-  gdb::observers::sync_execution_done.attach (tui_on_sync_execution_done);
-  gdb::observers::command_error.attach (tui_on_command_error);
+  gdb::observers::normal_stop.attach (tui_on_normal_stop, "tui-interp");
+  gdb::observers::signal_received.attach (tui_on_signal_received, "tui-interp");
+  gdb::observers::end_stepping_range.attach (tui_on_end_stepping_range,
+					     "tui-interp");
+  gdb::observers::signal_exited.attach (tui_on_signal_exited, "tui-interp");
+  gdb::observers::exited.attach (tui_on_exited, "tui-interp");
+  gdb::observers::no_history.attach (tui_on_no_history, "tui-interp");
+  gdb::observers::sync_execution_done.attach (tui_on_sync_execution_done,
+					      "tui-interp");
+  gdb::observers::command_error.attach (tui_on_command_error, "tui-interp");
   gdb::observers::user_selected_context_changed.attach
-    (tui_on_user_selected_context_changed);
+    (tui_on_user_selected_context_changed, "tui-interp");
 }

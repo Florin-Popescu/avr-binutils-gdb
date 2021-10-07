@@ -1,4 +1,4 @@
-# Copyright 2008-2020 Free Software Foundation, Inc.
+# Copyright 2008-2021 Free Software Foundation, Inc.
 
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -62,8 +62,6 @@ proc test {} {
     global gdb_prompt
     global decimal
 
-    clean_restart ${binfile}
-
     set test_spawn_id [spawn_wait_for_attach $binfile]
     set testpid [spawn_id_get_pid $test_spawn_id]
 
@@ -108,12 +106,18 @@ proc test {} {
 	    sleep 1
 
 	    set test "no new threads"
-	    gdb_test_multiple "info threads" $test {
-		-re "New .*$gdb_prompt $" {
-		    fail $test
+	    set status 1
+	    gdb_test_multiple "info threads" $test -lbl {
+		-re "\r\n\[^\r\n\]*New " {
+		    set status 0
+		    exp_continue
 		}
-		-re "$gdb_prompt $" {
-		    pass $test
+		-re -wrap "" {
+		    if { $status == 1 } {
+			pass $gdb_test_name
+		    } else {
+			fail $gdb_test_name
+		    }
 		}
 	    }
 
@@ -164,7 +168,8 @@ proc test {} {
 # failure.
 set options { "additional_flags=-DTIMEOUT=$timeout" debug pthreads }
 
-if {[prepare_for_testing "failed to prepare" $testfile $srcfile $options] == -1} {
+if {[prepare_for_testing "failed to prepare" $testfile $srcfile \
+	 $options] == -1} {
     return -1
 }
 
