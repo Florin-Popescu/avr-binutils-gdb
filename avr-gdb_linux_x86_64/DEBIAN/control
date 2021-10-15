@@ -1,5 +1,5 @@
 Package: avr-gdb
-Version: 11.1-1
+Version: 11.1-2
 Section: base
 Priority: optional
 Architecture: amd64
