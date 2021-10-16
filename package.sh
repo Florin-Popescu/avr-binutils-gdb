@@ -1,6 +1,6 @@
 #!/bin/bash
 
-TOOL=avr-gdb
+TOOL=avr-binutils-gdb
 ARCH=$(uname -m)
 OS=$(uname -o | cut -d '/' -f2 | tr '[:upper:]' '[:lower:]')
 PACKAGE="$TOOL"_"$OS"_"$ARCH"
