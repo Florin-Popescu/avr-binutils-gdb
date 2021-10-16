@@ -1,8 +1,8 @@
-Package: avr-gdb
+Package: avr-binutils-gdb
 Version: 11.1-2
 Section: base
 Priority: optional
 Architecture: arm64
 Maintainer: Florin Popescu <florinsgpopescu@gmail.com>
-Description: AVR GDB
- GNU Debugger for AVR microcontrollers
+Description: AVR Binutils + GDB
+ GNU Debugger and binary tools for AVR microcontrollers
