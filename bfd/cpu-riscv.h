@@ -79,6 +79,3 @@ riscv_get_priv_spec_class_from_numbers (unsigned int,
 					unsigned int,
 					unsigned int,
 					enum riscv_spec_class *);
-
-extern bool
-riscv_elf_is_mapping_symbols (const char *);

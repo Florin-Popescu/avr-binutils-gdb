@@ -19,8 +19,6 @@
 #ifndef COMMON_NEXT_ITERATOR_H
 #define COMMON_NEXT_ITERATOR_H
 
-#include "gdbsupport/iterator-range.h"
-
 /* An iterator that uses the 'next' field of a type to iterate.  This
    can be used with various GDB types that are stored as linked
    lists.  */
@@ -72,9 +70,33 @@ private:
   T *m_item;
 };
 
-/* A convenience wrapper to make a range type around a next_iterator.  */
+/* A range adapter that allows iterating over a linked list.  */
 
-template <typename T>
-using next_range = iterator_range<next_iterator<T>>;
+template<typename T, typename Iterator = next_iterator<T>>
+class next_adapter
+{
+public:
+
+  explicit next_adapter (T *item)
+    : m_item (item)
+  {
+  }
+
+  using iterator = Iterator;
+
+  iterator begin () const
+  {
+    return iterator (m_item);
+  }
+
+  iterator end () const
+  {
+    return iterator ();
+  }
+
+private:
+
+  T *m_item;
+};
 
 #endif /* COMMON_NEXT_ITERATOR_H */

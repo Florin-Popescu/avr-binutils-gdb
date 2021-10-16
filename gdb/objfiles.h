@@ -380,7 +380,29 @@ private:
 
 /* A range adapter wrapping separate_debug_iterator.  */
 
-typedef iterator_range<separate_debug_iterator> separate_debug_range;
+class separate_debug_range
+{
+public:
+
+  explicit separate_debug_range (struct objfile *objfile)
+    : m_objfile (objfile)
+  {
+  }
+
+  separate_debug_iterator begin ()
+  {
+    return separate_debug_iterator (m_objfile);
+  }
+
+  separate_debug_iterator end ()
+  {
+    return separate_debug_iterator (nullptr);
+  }
+
+private:
+
+  struct objfile *m_objfile;
+};
 
 /* Master structure for keeping track of each file from which
    gdb reads symbols.  There are several ways these get allocated: 1.
@@ -423,28 +445,51 @@ public:
 
   DISABLE_COPY_AND_ASSIGN (objfile);
 
+  typedef next_adapter<struct compunit_symtab> compunits_range;
+
   /* A range adapter that makes it possible to iterate over all
      compunits in one objfile.  */
 
-  compunit_symtab_range compunits ()
+  compunits_range compunits ()
   {
-    return compunit_symtab_range (compunit_symtabs);
+    return compunits_range (compunit_symtabs);
   }
 
   /* A range adapter that makes it possible to iterate over all
      minimal symbols of an objfile.  */
 
-  typedef iterator_range<minimal_symbol_iterator> msymbols_range;
+  class msymbols_range
+  {
+  public:
+
+    explicit msymbols_range (struct objfile *objfile)
+      : m_objfile (objfile)
+    {
+    }
+
+    minimal_symbol_iterator begin () const
+    {
+      return minimal_symbol_iterator (m_objfile->per_bfd->msymbols.get ());
+    }
+
+    minimal_symbol_iterator end () const
+    {
+      return minimal_symbol_iterator
+	(m_objfile->per_bfd->msymbols.get ()
+	 + m_objfile->per_bfd->minimal_symbol_count);
+    }
+
+  private:
+
+    struct objfile *m_objfile;
+  };
 
   /* Return a range adapter for iterating over all minimal
      symbols.  */
 
   msymbols_range msymbols ()
   {
-    auto start = minimal_symbol_iterator (per_bfd->msymbols.get ());
-    auto end = minimal_symbol_iterator (per_bfd->msymbols.get ()
-					+ per_bfd->minimal_symbol_count);
-    return msymbols_range (start, end);
+    return msymbols_range (this);
   }
 
   /* Return a range adapter for iterating over all the separate debug
@@ -452,9 +497,7 @@ public:
 
   separate_debug_range separate_debug_objfiles ()
   {
-    auto start = separate_debug_iterator (this);
-    auto end = separate_debug_iterator (nullptr);
-    return separate_debug_range (start, end);
+    return separate_debug_range (this);
   }
 
   CORE_ADDR text_section_offset () const

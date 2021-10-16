@@ -1993,7 +1993,8 @@ record_full_goto_entry (struct record_full_entry *p)
 
   registers_changed ();
   reinit_frame_cache ();
-  inferior_thread ()->set_stop_pc (regcache_read_pc (get_current_regcache ()));
+  inferior_thread ()->suspend.stop_pc
+    = regcache_read_pc (get_current_regcache ());
   print_stack_frame (get_selected_frame (NULL), 1, SRC_AND_LOC, 1);
 }
 

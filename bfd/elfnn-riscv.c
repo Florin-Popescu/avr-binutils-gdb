@@ -32,6 +32,7 @@
 #include "elf/riscv.h"
 #include "opcode/riscv.h"
 #include "objalloc.h"
+#include "cpu-riscv.h"
 
 #include <limits.h>
 #ifndef CHAR_BIT
@@ -60,8 +61,6 @@
 #define ELF_MACHINE_CODE		EM_RISCV
 #define ELF_MAXPAGESIZE			0x1000
 #define ELF_COMMONPAGESIZE		0x1000
-
-#define RISCV_ATTRIBUTES_SECTION_NAME ".riscv.attributes"
 
 /* RISC-V ELF linker hash entry.  */
 
@@ -3442,7 +3441,7 @@ riscv_merge_std_ext (bfd *ibfd,
 		     struct riscv_subset_t **pin,
 		     struct riscv_subset_t **pout)
 {
-  const char *standard_exts = "mafdqlcbjtpvn";
+  const char *standard_exts = riscv_supported_std_ext ();
   const char *p;
   struct riscv_subset_t *in = *pin;
   struct riscv_subset_t *out = *pout;
@@ -3586,13 +3585,13 @@ riscv_merge_arch_attr_info (bfd *ibfd, char *in_arch, char *out_arch)
   rpe_in.subset_list = &in_subsets;
   rpe_in.error_handler = _bfd_error_handler;
   rpe_in.xlen = &xlen_in;
-  rpe_in.isa_spec = ISA_SPEC_CLASS_NONE;
+  rpe_in.get_default_version = NULL;
   rpe_in.check_unknown_prefixed_ext = false;
 
   rpe_out.subset_list = &out_subsets;
   rpe_out.error_handler = _bfd_error_handler;
   rpe_out.xlen = &xlen_out;
-  rpe_out.isa_spec = ISA_SPEC_CLASS_NONE;
+  rpe_out.get_default_version = NULL;
   rpe_out.check_unknown_prefixed_ext = false;
 
   if (in_arch == NULL && out_arch == NULL)
@@ -3994,7 +3993,7 @@ riscv_relax_delete_bytes (bfd *abfd, asection *sec, bfd_vma addr, size_t count,
 	 foo becomes an alias for foo@BAR, and hence they need the same
 	 treatment.  */
       if (link_info->wrap_hash != NULL
-	  || sym_hash->versioned != unversioned)
+	  || sym_hash->versioned == versioned_hidden)
 	{
 	  struct elf_link_hash_entry **cur_sym_hashes;
 
@@ -5149,89 +5148,14 @@ riscv_elf_obj_attrs_arg_type (int tag)
   return (tag & 1) != 0 ? ATTR_TYPE_FLAG_STR_VAL : ATTR_TYPE_FLAG_INT_VAL;
 }
 
-/* Do not choose mapping symbols as a function name.  */
-
-static bfd_size_type
-riscv_maybe_function_sym (const asymbol *sym,
-			  asection *sec,
-			  bfd_vma *code_off)
-{
-  if (sym->flags & BSF_LOCAL
-      && riscv_elf_is_mapping_symbols (sym->name))
-    return 0;
-
-  return _bfd_elf_maybe_function_sym (sym, sec, code_off);
-}
-
-/* Treat the following cases as target special symbols, they are
-   usually omitted.  */
+/* PR27584, Omit local and empty symbols since they usually generated
+   for pcrel relocations.  */
 
 static bool
 riscv_elf_is_target_special_symbol (bfd *abfd, asymbol *sym)
 {
-  /* PR27584, local and empty symbols.  Since they are usually
-     generated for pcrel relocations.  */
   return (!strcmp (sym->name, "")
-	  || _bfd_elf_is_local_label_name (abfd, sym->name)
-	  /* PR27916, mapping symbols.  */
-	  || riscv_elf_is_mapping_symbols (sym->name));
-}
-
-static int
-riscv_elf_additional_program_headers (bfd *abfd,
-				      struct bfd_link_info *info ATTRIBUTE_UNUSED)
-{
-  int ret = 0;
-
-  /* See if we need a PT_RISCV_ATTRIBUTES segment.  */
-  if (bfd_get_section_by_name (abfd, RISCV_ATTRIBUTES_SECTION_NAME))
-    ++ret;
-
-  return ret;
-}
-
-static bool
-riscv_elf_modify_segment_map (bfd *abfd,
-			      struct bfd_link_info *info ATTRIBUTE_UNUSED)
-{
-  asection *s;
-  struct elf_segment_map *m, **pm;
-  size_t amt;
-
-  /* If there is a .riscv.attributes section, we need a PT_RISCV_ATTRIBUTES
-     segment.  */
-  s = bfd_get_section_by_name (abfd, RISCV_ATTRIBUTES_SECTION_NAME);
-  if (s != NULL)
-    {
-      for (m = elf_seg_map (abfd); m != NULL; m = m->next)
-	if (m->p_type == PT_RISCV_ATTRIBUTES)
-	  break;
-      /* If there is already a PT_RISCV_ATTRIBUTES header, avoid adding
-	 another.  */
-      if (m == NULL)
-	{
-	  amt = sizeof (*m);
-	  m = bfd_zalloc (abfd, amt);
-	  if (m == NULL)
-	    return false;
-
-	  m->p_type = PT_RISCV_ATTRIBUTES;
-	  m->count = 1;
-	  m->sections[0] = s;
-
-	  /* We want to put it after the PHDR and INTERP segments.  */
-	  pm = &elf_seg_map (abfd);
-	  while (*pm != NULL
-		 && ((*pm)->p_type == PT_PHDR
-		     || (*pm)->p_type == PT_INTERP))
-	    pm = &(*pm)->next;
-
-	  m->next = *pm;
-	  *pm = m;
-	}
-    }
-
-  return true;
+	  || _bfd_elf_is_local_label_name (abfd, sym->name));
 }
 
 #define TARGET_LITTLE_SYM			riscv_elfNN_vec
@@ -5262,14 +5186,10 @@ riscv_elf_modify_segment_map (bfd *abfd,
 #define elf_backend_grok_psinfo			riscv_elf_grok_psinfo
 #define elf_backend_object_p			riscv_elf_object_p
 #define elf_backend_write_core_note		riscv_write_core_note
-#define elf_backend_maybe_function_sym		riscv_maybe_function_sym
 #define elf_info_to_howto_rel			NULL
 #define elf_info_to_howto			riscv_info_to_howto_rela
 #define bfd_elfNN_bfd_relax_section		_bfd_riscv_relax_section
 #define bfd_elfNN_mkobject			elfNN_riscv_mkobject
-#define elf_backend_additional_program_headers \
-  riscv_elf_additional_program_headers
-#define elf_backend_modify_segment_map		riscv_elf_modify_segment_map
 
 #define elf_backend_init_index_section		_bfd_elf_init_1_index_section
 
@@ -5291,6 +5211,6 @@ riscv_elf_modify_segment_map (bfd *abfd,
 #undef  elf_backend_obj_attrs_section_type
 #define elf_backend_obj_attrs_section_type	SHT_RISCV_ATTRIBUTES
 #undef  elf_backend_obj_attrs_section
-#define elf_backend_obj_attrs_section		RISCV_ATTRIBUTES_SECTION_NAME
+#define elf_backend_obj_attrs_section		".riscv.attributes"
 
 #include "elfNN-target.h"

@@ -428,23 +428,22 @@ class Symbol
   // Return whether this symbol has an entry in the GOT section.
   // For a TLS symbol, this GOT entry will hold its tp-relative offset.
   bool
-  has_got_offset(unsigned int got_type, uint64_t addend = 0) const
-  { return this->got_offsets_.get_offset(got_type, addend) != -1U; }
+  has_got_offset(unsigned int got_type) const
+  { return this->got_offsets_.get_offset(got_type) != -1U; }
 
   // Return the offset into the GOT section of this symbol.
   unsigned int
-  got_offset(unsigned int got_type, uint64_t addend = 0) const
+  got_offset(unsigned int got_type) const
   {
-    unsigned int got_offset = this->got_offsets_.get_offset(got_type, addend);
+    unsigned int got_offset = this->got_offsets_.get_offset(got_type);
     gold_assert(got_offset != -1U);
     return got_offset;
   }
 
   // Set the GOT offset of this symbol.
   void
-  set_got_offset(unsigned int got_type, unsigned int got_offset,
-		 uint64_t addend = 0)
-  { this->got_offsets_.set_offset(got_type, got_offset, addend); }
+  set_got_offset(unsigned int got_type, unsigned int got_offset)
+  { this->got_offsets_.set_offset(got_type, got_offset); }
 
   // Return the GOT offset list.
   const Got_offset_list*

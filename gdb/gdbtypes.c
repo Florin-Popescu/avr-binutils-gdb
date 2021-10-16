@@ -37,7 +37,6 @@
 #include "cp-support.h"
 #include "bcache.h"
 #include "dwarf2/loc.h"
-#include "dwarf2/read.h"
 #include "gdbcore.h"
 #include "floatformat.h"
 #include "f-lang.h"
@@ -1281,7 +1280,13 @@ update_static_array_size (struct type *type)
       int stride;
       struct type *element_type;
 
-      stride = type->bit_stride ();
+      /* If the array itself doesn't provide a stride value then take
+	 whatever stride the range provides.  Don't update BIT_STRIDE as
+	 we don't want to place the stride value from the range into this
+	 arrays bit size field.  */
+      stride = TYPE_FIELD_BITSIZE (type, 0);
+      if (stride == 0)
+	stride = range_type->bit_stride ();
 
       if (!get_discrete_bounds (range_type, &low_bound, &high_bound))
 	low_bound = high_bound = 0;
@@ -1847,13 +1852,13 @@ lookup_struct_elt (struct type *type, const char *name, int noerr)
 
   for (i = type->num_fields () - 1; i >= TYPE_N_BASECLASSES (type); i--)
     {
-      const char *t_field_name = type->field (i).name ();
+      const char *t_field_name = TYPE_FIELD_NAME (type, i);
 
       if (t_field_name && (strcmp_iw (t_field_name, name) == 0))
 	{
 	  return {&type->field (i), TYPE_FIELD_BITPOS (type, i)};
 	}
-      else if (!t_field_name || *t_field_name == '\0')
+     else if (!t_field_name || *t_field_name == '\0')
 	{
 	  struct_elt elt
 	    = lookup_struct_elt (type->field (i).type (), name, 1);
@@ -1892,10 +1897,11 @@ lookup_struct_elt_type (struct type *type, const char *name, int noerr)
     return NULL;
 }
 
-/* Return the largest number representable by unsigned integer type TYPE.  */
+/* Store in *MAX the largest number representable by unsigned integer type
+   TYPE.  */
 
-ULONGEST
-get_unsigned_type_max (struct type *type)
+void
+get_unsigned_type_max (struct type *type, ULONGEST *max)
 {
   unsigned int n;
 
@@ -1905,7 +1911,7 @@ get_unsigned_type_max (struct type *type)
 
   /* Written this way to avoid overflow.  */
   n = TYPE_LENGTH (type) * TARGET_CHAR_BIT;
-  return ((((ULONGEST) 1 << (n - 1)) - 1) << 1) | 1;
+  *max = ((((ULONGEST) 1 << (n - 1)) - 1) << 1) | 1;
 }
 
 /* Store in *MIN, *MAX the smallest and largest numbers representable by
@@ -1923,21 +1929,6 @@ get_signed_type_minmax (struct type *type, LONGEST *min, LONGEST *max)
   n = TYPE_LENGTH (type) * TARGET_CHAR_BIT;
   *min = -((ULONGEST) 1 << (n - 1));
   *max = ((ULONGEST) 1 << (n - 1)) - 1;
-}
-
-/* Return the largest value representable by pointer type TYPE. */
-
-CORE_ADDR
-get_pointer_type_max (struct type *type)
-{
-  unsigned int n;
-
-  type = check_typedef (type);
-  gdb_assert (type->code () == TYPE_CODE_PTR);
-  gdb_assert (TYPE_LENGTH (type) <= sizeof (CORE_ADDR));
-
-  n = TYPE_LENGTH (type) * TARGET_CHAR_BIT;
-  return ((((CORE_ADDR) 1 << (n - 1)) - 1) << 1) | 1;
 }
 
 /* Internal routine called by TYPE_VPTR_FIELDNO to return the value of
@@ -3078,8 +3069,8 @@ check_stub_method (struct type *type, int method_id, int signature_id)
   struct gdbarch *gdbarch = type->arch ();
   struct fn_field *f;
   char *mangled_name = gdb_mangle_name (type, method_id, signature_id);
-  gdb::unique_xmalloc_ptr<char> demangled_name
-    = gdb_demangle (mangled_name, DMGL_PARAMS | DMGL_ANSI);
+  char *demangled_name = gdb_demangle (mangled_name,
+				       DMGL_PARAMS | DMGL_ANSI);
   char *argtypetext, *p;
   int depth = 0, argcount = 1;
   struct field *argtypes;
@@ -3087,7 +3078,7 @@ check_stub_method (struct type *type, int method_id, int signature_id)
 
   /* Make sure we got back a function string that we can use.  */
   if (demangled_name)
-    p = strchr (demangled_name.get (), '(');
+    p = strchr (demangled_name, '(');
   else
     p = NULL;
 
@@ -3178,6 +3169,8 @@ check_stub_method (struct type *type, int method_id, int signature_id)
 			argtypes, argcount, p[-2] == '.');
   mtype->set_is_stub (false);
   TYPE_FN_FIELD_STUB (f, signature_id) = 0;
+
+  xfree (demangled_name);
 }
 
 /* This is the external interface to check_stub_method, above.  This
@@ -4205,7 +4198,8 @@ check_types_equal (struct type *type1, struct type *type2,
 	      || FIELD_BITSIZE (*field1) != FIELD_BITSIZE (*field2)
 	      || FIELD_LOC_KIND (*field1) != FIELD_LOC_KIND (*field2))
 	    return false;
-	  if (!compare_maybe_null_strings (field1->name (), field2->name ()))
+	  if (!compare_maybe_null_strings (FIELD_NAME (*field1),
+					   FIELD_NAME (*field2)))
 	    return false;
 	  switch (FIELD_LOC_KIND (*field1))
 	    {
@@ -4772,7 +4766,7 @@ rank_one_type (struct type *parm, struct type *arg, struct value *value)
       struct type *t2 = arg;
 
       /* For pointers and references, compare target type.  */
-      if (parm->is_pointer_or_reference ())
+      if (parm->code () == TYPE_CODE_PTR || TYPE_IS_REFERENCE (parm))
 	{
 	  t1 = TYPE_TARGET_TYPE (parm);
 	  t2 = TYPE_TARGET_TYPE (arg);
@@ -4874,9 +4868,8 @@ print_args (struct field *args, int nargs, int spaces)
 
       for (i = 0; i < nargs; i++)
 	{
-	  printf_filtered
-	    ("%*s[%d] name '%s'\n", spaces, "", i,
-	     args[i].name () != NULL ? args[i].name () : "<NULL>");
+	  printf_filtered ("%*s[%d] name '%s'\n", spaces, "", i,
+			   args[i].name != NULL ? args[i].name : "<NULL>");
 	  recursive_dump_type (args[i].type (), spaces + 2);
 	}
     }
@@ -5344,10 +5337,10 @@ recursive_dump_type (struct type *type, int spaces)
 			 TYPE_FIELD_BITSIZE (type, idx));
       gdb_print_host_address (type->field (idx).type (), gdb_stdout);
       printf_filtered (" name '%s' (",
-		       type->field (idx).name () != NULL
-		       ? type->field (idx).name ()
+		       TYPE_FIELD_NAME (type, idx) != NULL
+		       ? TYPE_FIELD_NAME (type, idx)
 		       : "<NULL>");
-      gdb_print_host_address (type->field (idx).name (), gdb_stdout);
+      gdb_print_host_address (TYPE_FIELD_NAME (type, idx), gdb_stdout);
       printf_filtered (")\n");
       if (type->field (idx).type () != NULL)
 	{
@@ -5556,8 +5549,9 @@ copy_type_recursive (struct objfile *objfile,
 	    new_type->field (i).set_type
 	      (copy_type_recursive (objfile, type->field (i).type (),
 				    copied_types));
-	  if (type->field (i).name ())
-	    new_type->field (i).set_name (xstrdup (type->field (i).name ()));
+	  if (TYPE_FIELD_NAME (type, i))
+	    TYPE_FIELD_NAME (new_type, i) = 
+	      xstrdup (TYPE_FIELD_NAME (type, i));
 	  switch (TYPE_FIELD_LOC_KIND (type, i))
 	    {
 	    case FIELD_LOC_KIND_BITPOS:
@@ -5577,10 +5571,6 @@ copy_type_recursive (struct objfile *objfile,
 				  xstrdup (TYPE_FIELD_STATIC_PHYSNAME (type,
 								       i)));
 	      break;
-            case FIELD_LOC_KIND_DWARF_BLOCK:
-              SET_FIELD_DWARF_BLOCK (new_type->field (i),
-                                     TYPE_FIELD_DWARF_BLOCK (type, i));
-              break;
 	    default:
 	      internal_error (__FILE__, __LINE__,
 			      _("Unexpected type field location kind: %d"),
@@ -5841,10 +5831,10 @@ append_flags_type_field (struct type *type, int start_bitpos, int nr_bits,
   gdb_assert (type->code () == TYPE_CODE_FLAGS);
   gdb_assert (type->num_fields () + 1 <= type_bitsize);
   gdb_assert (start_bitpos >= 0 && start_bitpos < type_bitsize);
-  gdb_assert (nr_bits >= 1 && (start_bitpos + nr_bits) <= type_bitsize);
+  gdb_assert (nr_bits >= 1 && nr_bits <= type_bitsize);
   gdb_assert (name != NULL);
 
-  type->field (field_nr).set_name (xstrdup (name));
+  TYPE_FIELD_NAME (type, field_nr) = xstrdup (name);
   type->field (field_nr).set_type (field_type);
   SET_FIELD_BITPOS (type->field (field_nr), start_bitpos);
   TYPE_FIELD_BITSIZE (type, field_nr) = nr_bits;
@@ -5895,7 +5885,7 @@ append_composite_type_field_raw (struct type *t, const char *name,
   f = &t->field (t->num_fields () - 1);
   memset (f, 0, sizeof f[0]);
   f[0].set_type (field);
-  f[0].set_name (name);
+  FIELD_NAME (f[0]) = name;
   return f;
 }
 
@@ -6305,17 +6295,6 @@ objfile_type (struct objfile *objfile)
 
   objfile_type_data.set (objfile, objfile_type);
   return objfile_type;
-}
-
-/* See gdbtypes.h.  */
-
-CORE_ADDR
-call_site::pc () const
-{
-  compunit_symtab *cust = this->per_objfile->get_symtab (this->per_cu);
-  CORE_ADDR delta
-	= this->per_objfile->objfile->section_offsets[COMPUNIT_BLOCK_LINE_SECTION (cust)];
-  return m_unrelocated_pc + delta;
 }
 
 void _initialize_gdbtypes ();

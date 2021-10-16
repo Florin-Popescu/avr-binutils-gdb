@@ -23,7 +23,7 @@ Key to Flags:
 #...
 
 Elf file type is DYN \(Shared object file\)
-Entry point 0x[0-9a-f]+
+Entry point 0x10000080
 There are 4 program headers, starting at offset 52
 
 Program Headers:

@@ -77,6 +77,7 @@ proc finish_void { } {
 proc finish_abbreviation { abbrev } {
 
     if { ! [ runto "int_func" ] } then {
+        fail "running to int_func"
         return -1
     }
 
@@ -90,6 +91,7 @@ proc finish_no_print {} {
     global decimal
 
     if {![runto "int_func"]} {
+	untested "couldn't run to main"
 	return
     }
     gdb_test_no_output "set print finish off"
@@ -103,6 +105,7 @@ proc finish_tests { } {
     global gdb_prompt skip_float_test
 
     if { ! [ runto_main ] } then {
+	untested "couldn't run to main"
 	return -1
     }
 

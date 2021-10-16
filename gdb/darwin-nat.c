@@ -906,8 +906,8 @@ darwin_nat_target::resume (ptid_t ptid, int step, enum gdb_signal signal)
   int nsignal;
 
   inferior_debug
-    (2, _("darwin_resume: ptid=%s, step=%d, signal=%d\n"),
-     ptid.to_string ().c_str (), step, signal);
+    (2, _("darwin_resume: pid=%d, tid=0x%lx, step=%d, signal=%d\n"),
+     ptid.pid (), ptid.tid (), step, signal);
 
   if (signal == GDB_SIGNAL_0)
     nsignal = 0;
@@ -1171,8 +1171,8 @@ darwin_nat_target::wait_1 (ptid_t ptid, struct target_waitstatus *status)
   darwin_thread_t *thread;
 
   inferior_debug
-    (2, _("darwin_wait: waiting for a message ptid=%s\n"),
-     ptid.to_string ().c_str ());
+    (2, _("darwin_wait: waiting for a message pid=%d thread=%lx\n"),
+     ptid.pid (), ptid.tid ());
 
   /* Handle fake stop events at first.  */
   if (darwin_inf_fake_stop != NULL)
@@ -1822,7 +1822,7 @@ may_have_sip ()
 static void
 copy_shell_to_cache (const char *shell, const std::string &new_name)
 {
-  scoped_fd from_fd = gdb_open_cloexec (shell, O_RDONLY, 0);
+  scoped_fd from_fd (gdb_open_cloexec (shell, O_RDONLY, 0));
   if (from_fd.get () < 0)
     error (_("Could not open shell (%s) for reading: %s"),
 	   shell, safe_strerror (errno));
@@ -1833,7 +1833,7 @@ copy_shell_to_cache (const char *shell, const std::string &new_name)
 	   new_dir.c_str (), safe_strerror (errno));
 
   gdb::char_vector temp_name = make_temp_filename (new_name);
-  scoped_fd to_fd = gdb_mkostemp_cloexec (&temp_name[0]);
+  scoped_fd to_fd (gdb_mkostemp_cloexec (&temp_name[0]));
   gdb::unlinker unlink_file_on_error (temp_name.data ());
 
   if (to_fd.get () < 0)
@@ -2376,7 +2376,7 @@ darwin_nat_target::pid_to_exec_file (int pid)
 }
 
 ptid_t
-darwin_nat_target::get_ada_task_ptid (long lwp, ULONGEST thread)
+darwin_nat_target::get_ada_task_ptid (long lwp, long thread)
 {
   struct inferior *inf = current_inferior ();
   darwin_inferior *priv = get_darwin_inferior (inf);

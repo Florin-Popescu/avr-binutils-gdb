@@ -31,6 +31,7 @@ if { [prepare_for_testing "failed to prepare" ${testfile} [list $srcfile]] } {
 }
 
 if ![runto done] {
+    fail "couldn't run to done"
     return
 }
 

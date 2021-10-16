@@ -96,7 +96,7 @@ python_on_normal_stop (struct bpstats *bs, int print_frame)
   if (inferior_ptid == null_ptid)
     return;
 
-  stop_signal = inferior_thread ()->stop_signal ();
+  stop_signal = inferior_thread ()->suspend.stop_signal;
 
   gdbpy_enter enter_py (get_current_arch (), current_language);
 
@@ -864,20 +864,12 @@ static void
 infpy_dealloc (PyObject *obj)
 {
   inferior_object *inf_obj = (inferior_object *) obj;
+  struct inferior *inf = inf_obj->inferior;
 
-  /* The inferior itself holds a reference to this Python object, which
-     will keep the reference count of this object above zero until GDB
-     deletes the inferior and py_free_inferior is called.
+  if (! inf)
+    return;
 
-     Once py_free_inferior has been called then the link between this
-     Python object and the inferior is set to nullptr, and then the
-     reference count on this Python object is decremented.
-
-     The result of all this is that the link between this Python object and
-     the inferior should always have been set to nullptr before this
-     function is called.  */
-  gdb_assert (inf_obj->inferior == nullptr);
-
+  set_inferior_data (inf, infpy_inf_data_key, NULL);
   Py_TYPE (obj)->tp_free (obj);
 }
 
@@ -1034,7 +1026,7 @@ PyTypeObject inferior_object_type =
   0,				  /* tp_getattro */
   0,				  /* tp_setattro */
   0,				  /* tp_as_buffer */
-  Py_TPFLAGS_DEFAULT,		  /* tp_flags */
+  Py_TPFLAGS_DEFAULT | Py_TPFLAGS_HAVE_ITER,  /* tp_flags */
   "GDB inferior object",	  /* tp_doc */
   0,				  /* tp_traverse */
   0,				  /* tp_clear */

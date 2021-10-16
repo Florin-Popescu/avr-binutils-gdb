@@ -589,6 +589,7 @@ ia64_linux_nat_target::insert_watchpoint (CORE_ADDR addr, int len,
 					  enum target_hw_bp_type type,
 					  struct expression *cond)
 {
+  struct lwp_info *lp;
   int idx;
   long dbr_addr, dbr_mask;
   int max_watchpoints = 4;
@@ -629,8 +630,7 @@ ia64_linux_nat_target::insert_watchpoint (CORE_ADDR addr, int len,
 
   debug_registers[2 * idx] = dbr_addr;
   debug_registers[2 * idx + 1] = dbr_mask;
-
-  for (const lwp_info *lp : all_lwps ())
+  ALL_LWPS (lp)
     {
       store_debug_register_pair (lp->ptid, idx, &dbr_addr, &dbr_mask);
       enable_watchpoints_in_psr (lp->ptid);
@@ -657,12 +657,14 @@ ia64_linux_nat_target::remove_watchpoint (CORE_ADDR addr, int len,
       dbr_mask = debug_registers[2 * idx + 1];
       if ((dbr_mask & (0x3UL << 62)) && addr == (CORE_ADDR) dbr_addr)
 	{
+	  struct lwp_info *lp;
+
 	  debug_registers[2 * idx] = 0;
 	  debug_registers[2 * idx + 1] = 0;
 	  dbr_addr = 0;
 	  dbr_mask = 0;
 
-	  for (const lwp_info *lp : all_lwps ())
+	  ALL_LWPS (lp)
 	    store_debug_register_pair (lp->ptid, idx, &dbr_addr, &dbr_mask);
 
 	  return 0;

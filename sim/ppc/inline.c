@@ -24,7 +24,7 @@
 /* This must come before any other includes.  */
 #include "defs.h"
 
-#include "std-config.h"
+#include "ppc-config.h"
 
 #include "inline.h"
 

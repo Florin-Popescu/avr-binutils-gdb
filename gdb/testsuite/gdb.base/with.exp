@@ -209,6 +209,7 @@ with_test_prefix "run control" {
     clean_restart $binfile
 
     if ![runto_main] {
+	fail "cannot run to main"
 	return
     }
 

@@ -41,8 +41,6 @@ main (void)
 {
   int i;
 
-  alarm (300);
-
   pthread_barrier_init (&barrier, NULL, NUM_THREADS);
 
   for (i = 0; i < NUM_THREADS; i++)
@@ -55,8 +53,6 @@ main (void)
       assert (res == 0);
     }
 
-  while (1)
-    sleep (1);
-
+  sleep (300);
   return 0;
 }

@@ -21,6 +21,8 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 /* This must come before any other includes.  */
 #include "defs.h"
 
+#include "sim-main.h"
+
 #include <string.h>
 #include <signal.h>
 #include <stdlib.h>
@@ -40,7 +42,10 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 #include <sys/select.h>
 #include <sys/socket.h>
 
-#include "sim-main.h"
+#ifndef __CYGWIN32__
+#include <netinet/tcp.h>
+#endif
+
 #include "sim-assert.h"
 #include "sim-options.h"
 
@@ -49,6 +54,24 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 #ifndef HAVE_SOCKLEN_T
 typedef int socklen_t;
 #endif
+
+/* Get definitions for both O_NONBLOCK and O_NDELAY.  */
+
+#ifndef O_NDELAY
+#ifdef FNDELAY
+#define O_NDELAY FNDELAY
+#else /* ! defined (FNDELAY) */
+#define O_NDELAY 0
+#endif /* ! defined (FNDELAY) */
+#endif /* ! defined (O_NDELAY) */
+
+#ifndef O_NONBLOCK
+#ifdef FNBLOCK
+#define O_NONBLOCK FNBLOCK
+#else /* ! defined (FNBLOCK) */
+#define O_NONBLOCK 0
+#endif /* ! defined (FNBLOCK) */
+#endif /* ! defined (O_NONBLOCK) */
 
 
 /* Compromise between eating cpu and properly busy-waiting.
@@ -176,7 +199,6 @@ dv_sockser_init (SIM_DESC sd)
 
   /* Handle writes to missing client -> SIGPIPE.
      ??? Need a central signal management module.  */
-#ifdef SIGPIPE
   {
     RETSIGTYPE (*orig) ();
     orig = signal (SIGPIPE, SIG_IGN);
@@ -184,7 +206,6 @@ dv_sockser_init (SIM_DESC sd)
     if (orig != SIG_DFL && orig != SIG_IGN)
       signal (SIGPIPE, orig);
   }
-#endif
 
   return SIM_RC_OK;
 }
@@ -256,9 +277,8 @@ connected_p (SIM_DESC sd)
     return 0;
 
   /* Set non-blocking i/o.  */
-#if defined(F_GETFL) && defined(O_NONBLOCK)
   flags = fcntl (sockser_fd, F_GETFL);
-  flags |= O_NONBLOCK;
+  flags |= O_NONBLOCK | O_NDELAY;
   if (fcntl (sockser_fd, F_SETFL, flags) == -1)
     {
       sim_io_eprintf (sd, "unable to set nonblocking i/o");
@@ -266,7 +286,6 @@ connected_p (SIM_DESC sd)
       sockser_fd = -1;
       return 0;
     }
-#endif
   return 1;
 }
 

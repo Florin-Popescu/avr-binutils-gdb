@@ -1301,12 +1301,12 @@ perform (void)
 	    {
 	      if (warning)
 		fprintf (stderr, "warning, %s is not recognised\n", next);
-	      idx = skip_past_newline_1 (ptr, idx);
+	      skip_past_newline ();
 	    }
 	  free (next);
 	}
       else
-	idx = skip_past_newline_1 (ptr, idx);
+	skip_past_newline ();
     }
 }
 

@@ -2639,9 +2639,6 @@ lang_add_section (lang_statement_list_type *ptr,
     case noalloc_section:
       flags &= ~SEC_ALLOC;
       break;
-    case readonly_section:
-      flags |= SEC_READONLY;
-      break;
     case noload_section:
       flags &= ~SEC_LOAD;
       flags |= SEC_NEVER_LOAD;
@@ -4234,9 +4231,6 @@ map_input_to_output_sections
 	      break;
 	    case noalloc_section:
 	      flags = SEC_HAS_CONTENTS;
-	      break;
-	    case readonly_section:
-	      flags |= SEC_READONLY;
 	      break;
 	    case noload_section:
 	      if (bfd_get_flavour (link_info.output_bfd)
@@ -6984,8 +6978,7 @@ lang_end (void)
 	  if (!bfd_set_start_address (link_info.output_bfd, val))
 	    einfo (_("%F%P: can't set start address\n"));
 	}
-      /* BZ 2004952: Only use the start of the entry section for executables.  */
-      else if bfd_link_executable (&link_info)
+      else
 	{
 	  asection *ts;
 
@@ -7010,13 +7003,6 @@ lang_end (void)
 			 " not setting start address\n"),
 		       entry_symbol.name);
 	    }
-	}
-      else
-	{
-	  if (warn)
-	    einfo (_("%P: warning: cannot find entry symbol %s;"
-		     " not setting start address\n"),
-		   entry_symbol.name);
 	}
     }
 }

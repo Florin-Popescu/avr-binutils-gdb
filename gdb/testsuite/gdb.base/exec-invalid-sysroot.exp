@@ -47,6 +47,7 @@ proc do_exec_sysroot_test {} {
     # Start the program running, and stop at main.
     #
     if ![runto_main] then {
+	fail "couldn't run ${testfile}"
 	return
     }
 

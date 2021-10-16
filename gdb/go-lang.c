@@ -82,9 +82,9 @@ gccgo_string_p (struct type *type)
       type1 = check_typedef (type1);
 
       if (type0->code () == TYPE_CODE_PTR
-	  && strcmp (type->field (0).name (), "__data") == 0
+	  && strcmp (TYPE_FIELD_NAME (type, 0), "__data") == 0
 	  && type1->code () == TYPE_CODE_INT
-	  && strcmp (type->field (1).name (), "__length") == 0)
+	  && strcmp (TYPE_FIELD_NAME (type, 1), "__length") == 0)
 	{
 	  struct type *target_type = TYPE_TARGET_TYPE (type0);
 
@@ -333,9 +333,12 @@ unpack_mangled_go_symbol (const char *mangled_name,
    This demangler can't work in all situations,
    thus not too much effort is currently put into it.  */
 
-gdb::unique_xmalloc_ptr<char>
+char *
 go_language::demangle_symbol (const char *mangled_name, int options) const
 {
+  struct obstack tempbuf;
+  char *result;
+  char *name_buf;
   const char *package_name;
   const char *object_name;
   const char *method_type_package_name;
@@ -345,16 +348,15 @@ go_language::demangle_symbol (const char *mangled_name, int options) const
   if (mangled_name == NULL)
     return NULL;
 
-  gdb::unique_xmalloc_ptr<char> name_buf
-    (unpack_mangled_go_symbol (mangled_name,
-			       &package_name, &object_name,
-			       &method_type_package_name,
-			       &method_type_object_name,
-			       &method_type_is_pointer));
+  name_buf = unpack_mangled_go_symbol (mangled_name,
+				       &package_name, &object_name,
+				       &method_type_package_name,
+				       &method_type_object_name,
+				       &method_type_is_pointer);
   if (name_buf == NULL)
     return NULL;
 
-  auto_obstack tempbuf;
+  obstack_init (&tempbuf);
 
   /* Print methods as they appear in "method expressions".  */
   if (method_type_package_name != NULL)
@@ -378,7 +380,10 @@ go_language::demangle_symbol (const char *mangled_name, int options) const
     }
   obstack_grow_str0 (&tempbuf, "");
 
-  return make_unique_xstrdup ((const char *) obstack_finish (&tempbuf));
+  result = xstrdup ((const char *) obstack_finish (&tempbuf));
+  obstack_free (&tempbuf, NULL);
+  xfree (name_buf);
+  return result;
 }
 
 /* Given a Go symbol, return its package or NULL if unknown.

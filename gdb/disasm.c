@@ -39,7 +39,7 @@
 
 /* This variable is used to hold the prospective disassembler_options value
    which is set by the "set disassembler_options" command.  */
-static std::string prospective_options;
+static char *prospective_options = NULL;
 
 /* This structure is used to store line number information for the
    deprecated /m option.
@@ -928,16 +928,13 @@ get_disassembler_options (struct gdbarch *gdbarch)
 }
 
 void
-set_disassembler_options (const char *prospective_options)
+set_disassembler_options (char *prospective_options)
 {
   struct gdbarch *gdbarch = get_current_arch ();
   char **disassembler_options = gdbarch_disassembler_options (gdbarch);
   const disasm_options_and_args_t *valid_options_and_args;
   const disasm_options_t *valid_options;
-  gdb::unique_xmalloc_ptr<char> prospective_options_local
-    = make_unique_xstrdup (prospective_options);
-  char *options = remove_whitespace_and_extra_commas
-    (prospective_options_local.get ());
+  char *options = remove_whitespace_and_extra_commas (prospective_options);
   const char *opt;
 
   /* Allow all architectures, even ones that do not support 'set disassembler',
@@ -1006,7 +1003,7 @@ static void
 set_disassembler_options_sfunc (const char *args, int from_tty,
 				struct cmd_list_element *c)
 {
-  set_disassembler_options (prospective_options.c_str ());
+  set_disassembler_options (prospective_options);
 }
 
 static void

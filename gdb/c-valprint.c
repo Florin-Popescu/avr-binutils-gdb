@@ -486,7 +486,7 @@ c_value_print (struct value *val, struct ui_file *stream,
 
   type = check_typedef (value_type (val));
 
-  if (type->is_pointer_or_reference ())
+  if (type->code () == TYPE_CODE_PTR || TYPE_IS_REFERENCE (type))
     {
       struct type *original_type = value_type (val);
 

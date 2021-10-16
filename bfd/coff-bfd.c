@@ -45,9 +45,8 @@ bfd_coff_get_syment (bfd *abfd,
   *psyment = csym->native->u.syment;
 
   if (csym->native->fix_value)
-    psyment->n_value =
-      ((psyment->n_value - (bfd_hostptr_t) obj_raw_syments (abfd))
-       / sizeof (combined_entry_type));
+    psyment->n_value = psyment->n_value -
+      (bfd_hostptr_t) obj_raw_syments (abfd);
 
   /* FIXME: We should handle fix_line here.  */
 

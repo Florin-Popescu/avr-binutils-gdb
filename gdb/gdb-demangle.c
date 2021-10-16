@@ -160,6 +160,7 @@ is_cplus_marker (int c)
 static void
 demangle_command (const char *args, int from_tty)
 {
+  char *demangled;
   const char *name;
   const char *arg_start;
   int processing_args = 1;
@@ -201,10 +202,12 @@ demangle_command (const char *args, int from_tty)
   else
     lang = current_language;
 
-  gdb::unique_xmalloc_ptr<char> demangled
-    = language_demangle (lang, name, DMGL_ANSI | DMGL_PARAMS);
+  demangled = language_demangle (lang, name, DMGL_ANSI | DMGL_PARAMS);
   if (demangled != NULL)
-    printf_filtered ("%s\n", demangled.get ());
+    {
+      printf_filtered ("%s\n", demangled);
+      xfree (demangled);
+    }
   else
     error (_("Can't demangle \"%s\""), name);
 }

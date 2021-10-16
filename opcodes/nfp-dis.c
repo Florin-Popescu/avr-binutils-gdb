@@ -46,9 +46,6 @@
 #define _NFP_ME27_28_CSR_CTX_ENABLES     0x18
 #define _NFP_ME27_28_CSR_MISC_CONTROL    0x160
 
-#define _NFP_ISLAND_MAX 64
-#define _NFP_ME_MAX     12
-
 typedef struct
 {
   unsigned char ctx4_mode:1;
@@ -68,7 +65,7 @@ nfp_opts;
 /* mecfgs[island][menum][is-text] */
 typedef struct
 {
-  nfp_priv_mecfg mecfgs[_NFP_ISLAND_MAX][_NFP_ME_MAX][2];
+  nfp_priv_mecfg mecfgs[64][12][2];
 }
 nfp_priv_data;
 
@@ -2594,7 +2591,7 @@ init_nfp3200_priv (nfp_priv_data * priv, struct disassemble_info *dinfo)
 
 static bool
 init_nfp6000_mecsr_sec (nfp_priv_data * priv, Elf_Internal_Shdr * sec,
-			bool is_for_text, struct disassemble_info *dinfo)
+			int is_for_text, struct disassemble_info *dinfo)
 {
   Elf_Nfp_InitRegEntry ireg;
   unsigned char buffer[sizeof (Elf_Nfp_InitRegEntry)];
@@ -2644,9 +2641,6 @@ init_nfp6000_mecsr_sec (nfp_priv_data * priv, Elf_Internal_Shdr * sec,
       menum = _BF (ireg.cpp_offset_lo, 13, 10) - 4;
       csr_off = _BF (ireg.cpp_offset_lo, 9, 0);
 
-      if (isl >= _NFP_ISLAND_MAX || menum >= _NFP_ME_MAX)
-	return false;
-	
       mecfg = &priv->mecfgs[isl][menum][is_for_text];
       switch (csr_off)
 	{
@@ -2672,7 +2666,7 @@ init_nfp6000_priv (nfp_priv_data * priv, struct disassemble_info *dinfo)
   size_t isl;
   unsigned int sec_cnt = 0;
   unsigned int sec_idx;
-  bool is_for_text;
+  int is_for_text;
 
   memset (mecfg_orders, -1, sizeof (mecfg_orders));
 
@@ -2841,12 +2835,6 @@ _print_instrs (bfd_vma addr, struct disassemble_info *dinfo, nfp_opts * opts)
 	  island = SHI_NFP_ISLAND (sh_info);
 	  menum = SHI_NFP_MENUM (sh_info);
 	  break;
-	}
-
-      if (island >= _NFP_ISLAND_MAX || menum >= _NFP_ME_MAX)
-	{
-	  dinfo->fprintf_func (dinfo->stream, "Invalid island or me.");
-	  return _NFP_ERR_STOP;
 	}
 
       mecfg = &priv->mecfgs[island][menum][is_text];

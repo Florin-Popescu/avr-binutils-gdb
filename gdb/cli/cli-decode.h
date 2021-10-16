@@ -55,6 +55,7 @@ struct cmd_list_element
       allow_unknown (0),
       abbrev_flag (0),
       type (not_set_cmd),
+      var_type (var_boolean),
       doc (doc_)
   {
     memset (&function, 0, sizeof (function));
@@ -159,22 +160,25 @@ struct cmd_list_element
      or "show").  */
   ENUM_BITFIELD (cmd_types) type : 2;
 
+  /* What kind of variable is *VAR?  */
+  ENUM_BITFIELD (var_types) var_type : 4;
+
   /* Function definition of this command.  NULL for command class
      names and for help topics that are not really commands.  NOTE:
      cagney/2002-02-02: This function signature is evolving.  For
      the moment suggest sticking with either set_cmd_cfunc() or
      set_cmd_sfunc().  */
-  cmd_func_ftype *func;
-
+  void (*func) (struct cmd_list_element *c, const char *args, int from_tty)
+    = nullptr;
   /* The command's real callback.  At present func() bounces through
      to one of the below.  */
   union
     {
-      /* Most commands don't need the cmd_list_element parameter passed to FUNC.
-	 They therefore register a command of this type, which doesn't have the
-	 cmd_list_element parameter.  do_simple_func is installed as FUNC, and
-	 acts as a shim between the two.  */
-      cmd_simple_func_ftype *simple_func;
+      /* If type is not_set_cmd, call it like this: */
+      cmd_const_cfunc_ftype *const_cfunc;
+      /* If type is set_cmd or show_cmd, first set the variables,
+	 and then call this: */
+      cmd_const_sfunc_ftype *sfunc;
     }
   function;
 
@@ -224,8 +228,9 @@ struct cmd_list_element
      used to finalize the CONTEXT field, if needed.  */
   void (*destroyer) (struct cmd_list_element *self, void *context) = nullptr;
 
-  /* Setting affected by "set" and "show".  Not used if type is not_set_cmd.  */
-  gdb::optional<setting> var;
+  /* Pointer to variable affected by "set" and "show".  Doesn't
+     matter if type is not_set.  */
+  void *var = nullptr;
 
   /* Pointer to NULL terminated list of enumerated values (like
      argv).  */

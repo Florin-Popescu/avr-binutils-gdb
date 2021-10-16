@@ -291,7 +291,8 @@ cmdscm_destroyer (struct cmd_list_element *self, void *context)
 /* Called by gdb to invoke the command.  */
 
 static void
-cmdscm_function (const char *args, int from_tty, cmd_list_element *command)
+cmdscm_function (struct cmd_list_element *command,
+		 const char *args, int from_tty)
 {
   command_smob *c_smob/*obj*/ = (command_smob *) command->context ();
   SCM arg_scm, tty_scm, result;

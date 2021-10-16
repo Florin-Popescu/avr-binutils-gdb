@@ -30,6 +30,7 @@
 #include "symfile.h"
 #include "coff-pe-read.h"
 #include "gdb_bfd.h"
+#include "complaints.h"
 #include "solib.h"
 #include "solib-target.h"
 #include "gdbcore.h"
@@ -761,7 +762,7 @@ create_enum (struct gdbarch *gdbarch, int bit, const char *name,
 
   for (i = 0; i < count; i++)
     {
-      type->field (i).set_name (values[i].name);
+      TYPE_FIELD_NAME (type, i) = values[i].name;
       SET_FIELD_ENUMVAL (type->field (i), values[i].value);
     }
 

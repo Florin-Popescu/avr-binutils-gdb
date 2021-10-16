@@ -29,6 +29,7 @@ set MIFLAGS "-i=mi"
 mi_clean_restart $binfile
 
 if {[mi_runto_main] < 0} {
+   fail "cannot run to main, testcase aborted"
    return 0
 }
 

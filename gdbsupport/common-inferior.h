@@ -32,10 +32,13 @@ extern const char *get_exec_wrapper ();
    otherwise return 0 in that case.  */
 extern const char *get_exec_file (int err);
 
-/* Return the inferior's current working directory.
+/* Return the inferior's current working directory.  If nothing has
+   been set, then return NULL.  */
+extern const char *get_inferior_cwd ();
 
-   If it is not set, the string is empty.  */
-extern const std::string &get_inferior_cwd ();
+/* Set the inferior current working directory.  If CWD is NULL, unset
+   the directory.  */
+extern void set_inferior_cwd (const char *cwd);
 
 /* Whether to start up the debuggee under a shell.
 

@@ -417,12 +417,10 @@ hw_opic_init_data(device *me)
       }
       if (!device_find_integer_array_property(me, "interrupt-ranges",
 					      reg_nr * 2,
-					      (signed_cell *)
-					        &opic->isu_block[isb].int_number)
+					      &opic->isu_block[isb].int_number)
 	  || !device_find_integer_array_property(me, "interrupt-ranges",
 						 reg_nr * 2 + 1,
-						 (signed_cell *)
-						   &opic->isu_block[isb].range))
+						 &opic->isu_block[isb].range))
 	device_error(me, "missing or invalid interrupt-ranges property entry %d", reg_nr);
       /* first reg entry specifies the address of both the IDU and the
          first set of ISU registers, adjust things accordingly */

@@ -852,7 +852,7 @@ md_assemble (char * str)
   char * op_start;
   char * op_end;
   mcore_opcode_info * opcode;
-  char * output = NULL;
+  char * output;
   int nlen = 0;
   unsigned short inst;
   unsigned reg;
@@ -1596,11 +1596,8 @@ md_assemble (char * str)
   if (strcmp (op_end, opcode->name) && strcmp (op_end, ""))
     as_warn (_("ignoring operands: %s "), op_end);
 
-  if (output != NULL)
-    {
-      output[0] = INST_BYTE0 (inst);
-      output[1] = INST_BYTE1 (inst);
-    }
+  output[0] = INST_BYTE0 (inst);
+  output[1] = INST_BYTE1 (inst);
 
 #ifdef OBJ_ELF
   dwarf2_emit_insn (2);

@@ -43,6 +43,7 @@
 
 static const bfd_arch_info_type arch_info_struct[] =
 {
+  N (bfd_mach_ft32, "ft32", false, &arch_info_struct[1]),
   N (bfd_mach_ft32b, "ft32b", false, NULL)
 };
 

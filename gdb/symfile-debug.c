@@ -405,9 +405,6 @@ objfile::expand_symtabs_matching
    domain_enum domain,
    enum search_domain kind)
 {
-  /* This invariant is documented in quick-functions.h.  */
-  gdb_assert (lookup_name != nullptr || symbol_matcher == nullptr);
-
   if (debug_symfile)
     fprintf_filtered (gdb_stdlog,
 		      "qf->expand_symtabs_matching (%s, %s, %s, %s, %s)\n",

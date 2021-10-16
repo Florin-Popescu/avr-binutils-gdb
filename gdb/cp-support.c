@@ -661,9 +661,10 @@ cp_canonicalize_string (const char *string)
 
 static std::unique_ptr<demangle_parse_info>
 mangled_name_to_comp (const char *mangled_name, int options,
-		      void **memory,
-		      gdb::unique_xmalloc_ptr<char> *demangled_p)
+		      void **memory, char **demangled_p)
 {
+  char *demangled_name;
+
   /* If it looks like a v3 mangled name, then try to go directly
      to trees.  */
   if (mangled_name[0] == '_' && mangled_name[1] == 'Z')
@@ -683,20 +684,22 @@ mangled_name_to_comp (const char *mangled_name, int options,
 
   /* If it doesn't, or if that failed, then try to demangle the
      name.  */
-  gdb::unique_xmalloc_ptr<char> demangled_name = gdb_demangle (mangled_name,
-							       options);
+  demangled_name = gdb_demangle (mangled_name, options);
   if (demangled_name == NULL)
    return NULL;
   
   /* If we could demangle the name, parse it to build the component
      tree.  */
   std::unique_ptr<demangle_parse_info> info
-    = cp_demangled_name_to_comp (demangled_name.get (), NULL);
+    = cp_demangled_name_to_comp (demangled_name, NULL);
 
   if (info == NULL)
-    return NULL;
+    {
+      xfree (demangled_name);
+      return NULL;
+    }
 
-  *demangled_p = std::move (demangled_name);
+  *demangled_p = demangled_name;
   return info;
 }
 
@@ -706,7 +709,7 @@ char *
 cp_class_name_from_physname (const char *physname)
 {
   void *storage = NULL;
-  gdb::unique_xmalloc_ptr<char> demangled_name;
+  char *demangled_name = NULL;
   gdb::unique_xmalloc_ptr<char> ret;
   struct demangle_component *ret_comp, *prev_comp, *cur_comp;
   std::unique_ptr<demangle_parse_info> info;
@@ -786,6 +789,7 @@ cp_class_name_from_physname (const char *physname)
     }
 
   xfree (storage);
+  xfree (demangled_name);
   return ret.release ();
 }
 
@@ -853,7 +857,7 @@ char *
 method_name_from_physname (const char *physname)
 {
   void *storage = NULL;
-  gdb::unique_xmalloc_ptr<char> demangled_name;
+  char *demangled_name = NULL;
   gdb::unique_xmalloc_ptr<char> ret;
   struct demangle_component *ret_comp;
   std::unique_ptr<demangle_parse_info> info;
@@ -871,6 +875,7 @@ method_name_from_physname (const char *physname)
     ret = cp_comp_to_string (ret_comp, 10);
 
   xfree (storage);
+  xfree (demangled_name);
   return ret.release ();
 }
 
@@ -1330,7 +1335,8 @@ add_symbol_overload_list_adl_namespace (struct type *type,
   const char *type_name;
   int i, prefix_len;
 
-  while (type->is_pointer_or_reference ()
+  while (type->code () == TYPE_CODE_PTR
+	 || TYPE_IS_REFERENCE (type)
 	 || type->code () == TYPE_CODE_ARRAY
 	 || type->code () == TYPE_CODE_TYPEDEF)
     {
@@ -1599,10 +1605,10 @@ report_failed_demangle (const char *name, bool core_dump_allowed,
 
 /* A wrapper for bfd_demangle.  */
 
-gdb::unique_xmalloc_ptr<char>
+char *
 gdb_demangle (const char *name, int options)
 {
-  gdb::unique_xmalloc_ptr<char> result;
+  char *result = NULL;
   int crash_signal = 0;
 
 #ifdef HAVE_WORKING_FORK
@@ -1631,7 +1637,7 @@ gdb_demangle (const char *name, int options)
 #endif
 
   if (crash_signal == 0)
-    result.reset (bfd_demangle (NULL, name, options));
+    result = bfd_demangle (NULL, name, options);
 
 #ifdef HAVE_WORKING_FORK
   if (catch_demangler_crashes)

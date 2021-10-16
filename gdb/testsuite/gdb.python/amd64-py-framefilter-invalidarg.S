@@ -102,6 +102,7 @@ die4e:
 	.uleb128 1f - 2f	# DW_AT_location
 2:
 	.byte	0x13	# DW_OP_drop
+	.quad 0
 1:
 #endif
 die5c:

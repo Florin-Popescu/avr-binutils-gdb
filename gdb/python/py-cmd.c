@@ -100,7 +100,8 @@ cmdpy_destroyer (struct cmd_list_element *self, void *context)
 /* Called by gdb to invoke the command.  */
 
 static void
-cmdpy_function (const char *args, int from_tty, cmd_list_element *command)
+cmdpy_function (struct cmd_list_element *command,
+		const char *args, int from_tty)
 {
   cmdpy_object *obj = (cmdpy_object *) command->context ();
 

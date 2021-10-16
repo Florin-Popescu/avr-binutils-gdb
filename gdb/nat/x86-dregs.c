@@ -35,68 +35,31 @@
 /* Accessor macros for low-level function vector.  */
 
 /* Can we update the inferior's debug registers?  */
-
-static bool
-x86_dr_low_can_set_addr ()
-{
-  return x86_dr_low.set_addr != nullptr;
-}
+#define x86_dr_low_can_set_addr() (x86_dr_low.set_addr != NULL)
 
 /* Update the inferior's debug register REGNUM from STATE.  */
-
-static void
-x86_dr_low_set_addr (struct x86_debug_reg_state *new_state, int i)
-{
-  x86_dr_low.set_addr (i, new_state->dr_mirror[i]);
-}
+#define x86_dr_low_set_addr(new_state, i) \
+  (x86_dr_low.set_addr ((i), (new_state)->dr_mirror[(i)]))
 
 /* Return the inferior's debug register REGNUM.  */
-
-static CORE_ADDR
-x86_dr_low_get_addr (int i)
-{
-  return x86_dr_low.get_addr (i);
-}
+#define x86_dr_low_get_addr(i) (x86_dr_low.get_addr ((i)))
 
 /* Can we update the inferior's DR7 control register?  */
-
-static bool
-x86_dr_low_can_set_control ()
-{
-  return x86_dr_low.set_control != nullptr;
-}
+#define x86_dr_low_can_set_control() (x86_dr_low.set_control != NULL)
 
 /* Update the inferior's DR7 debug control register from STATE.  */
-
-static void
-x86_dr_low_set_control (struct x86_debug_reg_state *new_state)
-{
-  x86_dr_low.set_control (new_state->dr_control_mirror);
-}
+#define x86_dr_low_set_control(new_state) \
+  (x86_dr_low.set_control ((new_state)->dr_control_mirror))
 
 /* Return the value of the inferior's DR7 debug control register.  */
-
-static unsigned long
-x86_dr_low_get_control ()
-{
-  return x86_dr_low.get_control ();
-}
+#define x86_dr_low_get_control() (x86_dr_low.get_control ())
 
 /* Return the value of the inferior's DR6 debug status register.  */
-
-static unsigned long
-x86_dr_low_get_status ()
-{
-  return x86_dr_low.get_status ();
-}
+#define x86_dr_low_get_status() (x86_dr_low.get_status ())
 
 /* Return the debug register size, in bytes.  */
-
-static int
-x86_get_debug_register_length ()
-{
-  return x86_dr_low.debug_register_length;
-}
+#define x86_get_debug_register_length() \
+  (x86_dr_low.debug_register_length)
 
 /* Support for 8-byte wide hw watchpoints.  */
 #define TARGET_HAS_DR_LEN_8 (x86_get_debug_register_length () == 8)

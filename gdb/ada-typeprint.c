@@ -326,7 +326,7 @@ print_enum_type (struct type *type, struct ui_file *stream)
       if (i)
 	fprintf_filtered (stream, ", ");
       wrap_here ("    ");
-      fputs_styled (ada_enum_name (type->field (i).name ()),
+      fputs_styled (ada_enum_name (TYPE_FIELD_NAME (type, i)),
 		    variable_name_style.style (), stream);
       if (lastval != TYPE_FIELD_ENUMVAL (type, i))
 	{
@@ -439,7 +439,7 @@ print_choices (struct type *type, int field_num, struct ui_file *stream,
 {
   int have_output;
   int p;
-  const char *name = type->field (field_num).name ();
+  const char *name = TYPE_FIELD_NAME (type, field_num);
 
   have_output = 0;
 
@@ -620,7 +620,7 @@ print_selected_record_field_types (struct type *type, struct type *outer_type,
 	  flds += 1;
 	  fprintf_filtered (stream, "\n%*s", level + 4, "");
 	  ada_print_type (type->field (i).type (),
-			  type->field (i).name (),
+			  TYPE_FIELD_NAME (type, i),
 			  stream, show - 1, level + 4, flags);
 	  fprintf_filtered (stream, ";");
 	}
@@ -682,7 +682,7 @@ print_variant_part (const variant_part &part,
     name = "?";
   else
     {
-      name = type->field (part.discriminant_index).name ();;
+      name = TYPE_FIELD_NAME (type, part.discriminant_index);
       discr_type = type->field (part.discriminant_index).type ();
     }
 
@@ -851,7 +851,7 @@ print_unchecked_union_type (struct type *type, struct ui_file *stream,
 	  fprintf_filtered (stream, "\n%*swhen ? =>\n%*s", level + 8, "",
 			    level + 12, "");
 	  ada_print_type (type->field (i).type (),
-			  type->field (i).name (),
+			  TYPE_FIELD_NAME (type, i),
 			  stream, show - 1, level + 12, flags);
 	  fprintf_filtered (stream, ";");
 	}

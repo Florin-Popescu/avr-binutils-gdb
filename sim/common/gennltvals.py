@@ -67,7 +67,6 @@ FILE_HEADER = f"""\
 def gentvals(output: TextIO, cpp: str, srctype: str, srcdir: Path,
              headers: Iterable[str],
              pattern: str,
-             filter: str = r'^$',
              target: str = None):
     """Extract constants from the specified files using a regular expression.
 
@@ -95,13 +94,12 @@ def gentvals(output: TextIO, cpp: str, srctype: str, srcdir: Path,
     srcfile = ''.join(f'#include <{x}>\n' for x in headers)
     syms = set()
     define_pattern = re.compile(r'^#\s*define\s+(' + pattern + ')')
-    filter_pattern = re.compile(filter)
     for header in headers:
         with open(srcdir / header, 'r', encoding='utf-8') as fp:
             data = fp.read()
         for line in data.splitlines():
             m = define_pattern.match(line)
-            if m and not filter_pattern.search(line):
+            if m:
                 syms.add(m.group(1))
     for sym in sorted(syms):
         srcfile += f'#ifdef {sym}\nDEFVAL {{ "{sym}", {sym} }},\n#endif\n'
@@ -131,7 +129,7 @@ def gen_common(output: TextIO, newlib: Path, cpp: str):
              ('errno.h', 'sys/errno.h'), 'E[A-Z0-9]*')
 
     gentvals(output, cpp, 'signal', newlib / 'newlib/libc/include',
-             ('signal.h', 'sys/signal.h'), r'SIG[A-Z0-9]*', filter=r'SIGSTKSZ')
+             ('signal.h', 'sys/signal.h'), r'SIG[A-Z0-9]*')
 
     gentvals(output, cpp, 'open', newlib / 'newlib/libc/include',
              ('fcntl.h', 'sys/fcntl.h', 'sys/_default_fcntl.h'), r'O_[A-Z0-9]*')
@@ -162,7 +160,7 @@ def get_parser() -> argparse.ArgumentParser:
         formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument(
         '-o', '--output', type=Path,
-        help='write to the specified directory')
+        help='write to the specified file instead of stdout')
     parser.add_argument(
         '--cpp', type=str, default='cpp',
         help='the preprocessor to use')
@@ -180,14 +178,8 @@ def parse_args(argv: List[str]) -> argparse.Namespace:
     parser = get_parser()
     opts = parser.parse_args(argv)
 
-    if opts.output is None:
-        # Default to where the script lives.
-        opts.output = Path(__file__).resolve().parent
-
     if opts.srcroot is None:
         opts.srcroot = Path(__file__).resolve().parent.parent.parent
-    else:
-        opts.srcroot = opts.srcroot.resolve()
 
     if opts.newlib is None:
         # Try to find newlib relative to our source tree.
@@ -210,7 +202,10 @@ def main(argv: List[str]) -> int:
     """The main entry point for scripts."""
     opts = parse_args(argv)
 
-    output = (opts.output / 'nltvals.def').open('w', encoding='utf-8')
+    if opts.output is not None:
+        output = open(opts.output, 'w', encoding='utf-8')
+    else:
+        output = sys.stdout
 
     gen(output, opts.newlib, opts.cpp)
     return 0

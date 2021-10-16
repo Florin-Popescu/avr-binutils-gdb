@@ -69,7 +69,16 @@
 #endif
 
 #ifndef TC_VALIDATE_FIX_SUB
-#define TC_VALIDATE_FIX_SUB(FIX, SEG) 0
+#ifdef UNDEFINED_DIFFERENCE_OK
+/* The PA needs this for PIC code generation.  */
+#define TC_VALIDATE_FIX_SUB(FIX, SEG)			\
+  (md_register_arithmetic || (SEG) != reg_section)
+#else
+#define TC_VALIDATE_FIX_SUB(FIX, SEG)			\
+  ((md_register_arithmetic || (SEG) != reg_section)	\
+   && ((FIX)->fx_r_type == BFD_RELOC_GPREL32		\
+       || (FIX)->fx_r_type == BFD_RELOC_GPREL16))
+#endif
 #endif
 
 #ifndef TC_LINKRELAX_FIXUP
@@ -899,15 +908,6 @@ adjust_reloc_syms (bfd *abfd ATTRIBUTE_UNUSED,
   dump_section_relocs (abfd, sec, stderr);
 }
 
-void
-as_bad_subtract (fixS *fixp)
-{
-  as_bad_where (fixp->fx_file, fixp->fx_line,
-		_("can't resolve %s - %s"),
-		fixp->fx_addsy ? S_GET_NAME (fixp->fx_addsy) : "0",
-		S_GET_NAME (fixp->fx_subsy));
-}
-
 /* fixup_segment()
 
    Go through all the fixS's in a segment and see which ones can be
@@ -1030,7 +1030,12 @@ fixup_segment (fixS *fixP, segT this_segment)
 		as_bad_where (fixP->fx_file, fixP->fx_line,
 			      _("register value used as expression"));
 	      else
-		as_bad_subtract (fixP);
+		as_bad_where (fixP->fx_file, fixP->fx_line,
+			      _("can't resolve `%s' {%s section} - `%s' {%s section}"),
+			      fixP->fx_addsy ? S_GET_NAME (fixP->fx_addsy) : "0",
+			      segment_name (add_symbol_segment),
+			      S_GET_NAME (fixP->fx_subsy),
+			      segment_name (sub_symbol_segment));
 	    }
 	  else if (sub_symbol_segment != undefined_section
 		   && ! bfd_is_com_section (sub_symbol_segment)
@@ -1288,13 +1293,6 @@ write_relocs (bfd *abfd ATTRIBUTE_UNUSED, asection *sec,
       if (slack >= 0 && loc > fixp->fx_frag->fr_fix)
 	as_bad_where (fixp->fx_file, fixp->fx_line,
 		      _("internal error: fixup not contained within frag"));
-
-#ifdef obj_fixup_removed_symbol
-      if (fixp->fx_addsy && symbol_removed_p (fixp->fx_addsy))
-	obj_fixup_removed_symbol (&fixp->fx_addsy);
-      if (fixp->fx_subsy && symbol_removed_p (fixp->fx_subsy))
-	obj_fixup_removed_symbol (&fixp->fx_subsy);
-#endif
 
 #ifndef RELOC_EXPANSION_POSSIBLE
       *reloc = tc_gen_reloc (sec, fixp);
@@ -1762,10 +1760,9 @@ set_symtab (void)
      two.  Generate unused section symbols only if needed.  */
   nsyms = 0;
   for (symp = symbol_rootP; symp; symp = symbol_next (symp))
-    if (!symbol_removed_p (symp)
-	&& (bfd_keep_unused_section_symbols (stdoutput)
-	    || !symbol_section_p (symp)
-	    || symbol_used_in_reloc_p (symp)))
+    if (bfd_keep_unused_section_symbols (stdoutput)
+	|| !symbol_section_p (symp)
+	|| symbol_used_in_reloc_p (symp))
       nsyms++;
 
   if (nsyms)
@@ -1776,10 +1773,9 @@ set_symtab (void)
       asympp = (asymbol **) bfd_alloc (stdoutput, amt);
       symp = symbol_rootP;
       for (i = 0; i < nsyms; symp = symbol_next (symp))
-	if (!symbol_removed_p (symp)
-	    && (bfd_keep_unused_section_symbols (stdoutput)
-		|| !symbol_section_p (symp)
-		|| symbol_used_in_reloc_p (symp)))
+	if (bfd_keep_unused_section_symbols (stdoutput)
+	    || !symbol_section_p (symp)
+	    || symbol_used_in_reloc_p (symp))
 	  {
 	    asympp[i] = symbol_get_bfdsym (symp);
 	    if (asympp[i]->flags != BSF_SECTION_SYM

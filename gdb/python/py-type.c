@@ -204,13 +204,13 @@ convert_field (struct type *type, int field)
     }
 
   arg.reset (NULL);
-  if (type->field (field).name ())
+  if (TYPE_FIELD_NAME (type, field))
     {
-      const char *field_name = type->field (field).name ();
+      const char *field_name = TYPE_FIELD_NAME (type, field);
 
       if (field_name[0] != '\0')
 	{
-	  arg.reset (PyString_FromString (type->field (field).name ()));
+	  arg.reset (PyString_FromString (TYPE_FIELD_NAME (type, field)));
 	  if (arg == NULL)
 	    return NULL;
 	}
@@ -261,8 +261,8 @@ field_name (struct type *type, int field)
 {
   gdbpy_ref<> result;
 
-  if (type->field (field).name ())
-    result.reset (PyString_FromString (type->field (field).name ()));
+  if (TYPE_FIELD_NAME (type, field))
+    result.reset (PyString_FromString (TYPE_FIELD_NAME (type, field)));
   else
     result = gdbpy_ref<>::new_reference (Py_None);
 
@@ -470,7 +470,7 @@ typy_get_composite (struct type *type)
 	  GDB_PY_HANDLE_EXCEPTION (except);
 	}
 
-      if (!type->is_pointer_or_reference ())
+      if (type->code () != TYPE_CODE_PTR && !TYPE_IS_REFERENCE (type))
 	break;
       type = TYPE_TARGET_TYPE (type);
     }
@@ -1205,7 +1205,7 @@ typy_getitem (PyObject *self, PyObject *key)
 
   for (i = 0; i < type->num_fields (); i++)
     {
-      const char *t_field_name = type->field (i).name ();
+      const char *t_field_name = TYPE_FIELD_NAME (type, i);
 
       if (t_field_name && (strcmp_iw (t_field_name, field.get ()) == 0))
 	return convert_field (type, i).release ();
@@ -1263,7 +1263,7 @@ typy_has_key (PyObject *self, PyObject *args)
 
   for (i = 0; i < type->num_fields (); i++)
     {
-      const char *t_field_name = type->field (i).name ();
+      const char *t_field_name = TYPE_FIELD_NAME (type, i);
 
       if (t_field_name && (strcmp_iw (t_field_name, field) == 0))
 	Py_RETURN_TRUE;
@@ -1633,7 +1633,7 @@ PyTypeObject type_object_type =
   0,				  /*tp_getattro*/
   0,				  /*tp_setattro*/
   0,				  /*tp_as_buffer*/
-  Py_TPFLAGS_DEFAULT,		  /*tp_flags*/
+  Py_TPFLAGS_DEFAULT | Py_TPFLAGS_HAVE_ITER,  /*tp_flags*/
   "GDB type object",		  /* tp_doc */
   0,				  /* tp_traverse */
   0,				  /* tp_clear */
@@ -1682,7 +1682,7 @@ PyTypeObject field_object_type =
   0,				  /*tp_getattro*/
   0,				  /*tp_setattro*/
   0,				  /*tp_as_buffer*/
-  Py_TPFLAGS_DEFAULT,		  /*tp_flags*/
+  Py_TPFLAGS_DEFAULT | Py_TPFLAGS_HAVE_ITER,  /*tp_flags*/
   "GDB field object",		  /* tp_doc */
   0,				  /* tp_traverse */
   0,				  /* tp_clear */
@@ -1723,7 +1723,7 @@ PyTypeObject type_iterator_object_type = {
   0,				  /*tp_getattro*/
   0,				  /*tp_setattro*/
   0,				  /*tp_as_buffer*/
-  Py_TPFLAGS_DEFAULT,		  /*tp_flags*/
+  Py_TPFLAGS_DEFAULT | Py_TPFLAGS_HAVE_ITER,  /*tp_flags*/
   "GDB type iterator object",	  /*tp_doc */
   0,				  /*tp_traverse */
   0,				  /*tp_clear */

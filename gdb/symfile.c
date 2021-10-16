@@ -1349,7 +1349,7 @@ separate_debug_file_exists (const std::string &name, unsigned long crc,
   return 1;
 }
 
-std::string debug_file_directory;
+char *debug_file_directory = NULL;
 static void
 show_debug_file_directory (struct ui_file *file, int from_tty,
 			   struct cmd_list_element *c, const char *value)
@@ -1406,9 +1406,8 @@ find_separate_debug_file (const char *dir,
   bool target_prefix = startswith (dir, "target:");
   const char *dir_notarget = target_prefix ? dir + strlen ("target:") : dir;
   std::vector<gdb::unique_xmalloc_ptr<char>> debugdir_vec
-    = dirnames_to_char_ptr_vec (debug_file_directory.c_str ());
-  gdb::unique_xmalloc_ptr<char> canon_sysroot
-    = gdb_realpath (gdb_sysroot.c_str ());
+    = dirnames_to_char_ptr_vec (debug_file_directory);
+  gdb::unique_xmalloc_ptr<char> canon_sysroot = gdb_realpath (gdb_sysroot);
 
  /* MS-Windows/MS-DOS don't allow colons in file names; we must
     convert the drive letter into a one-letter directory, so that the
@@ -1449,7 +1448,7 @@ find_separate_debug_file (const char *dir,
 	  if (canon_sysroot.get () != NULL)
 	    base_path = child_path (canon_sysroot.get (), canon_dir);
 	  else
-	    base_path = child_path (gdb_sysroot.c_str (), canon_dir);
+	    base_path = child_path (gdb_sysroot, canon_dir);
 	}
       if (base_path != NULL)
 	{
@@ -2655,7 +2654,7 @@ add_filename_language (const char *ext, enum language lang)
   filename_language_table.emplace_back (ext, lang);
 }
 
-static std::string ext_args;
+static char *ext_args;
 static void
 show_ext_args (struct ui_file *file, int from_tty,
 	       struct cmd_list_element *c, const char *value)
@@ -2670,48 +2669,48 @@ static void
 set_ext_lang_command (const char *args,
 		      int from_tty, struct cmd_list_element *e)
 {
-  const char *begin = ext_args.c_str ();
-  const char *end = ext_args.c_str ();
+  char *cp = ext_args;
+  enum language lang;
 
   /* First arg is filename extension, starting with '.'  */
-  if (*end != '.')
-    error (_("'%s': Filename extension must begin with '.'"), ext_args.c_str ());
+  if (*cp != '.')
+    error (_("'%s': Filename extension must begin with '.'"), ext_args);
 
   /* Find end of first arg.  */
-  while (*end != '\0' && !isspace (*end))
-    end++;
+  while (*cp && !isspace (*cp))
+    cp++;
 
-  if (*end == '\0')
+  if (*cp == '\0')
     error (_("'%s': two arguments required -- "
 	     "filename extension and language"),
-	   ext_args.c_str ());
+	   ext_args);
 
-  /* Extract first arg, the extension.  */
-  std::string extension = ext_args.substr (0, end - begin);
+  /* Null-terminate first arg.  */
+  *cp++ = '\0';
 
   /* Find beginning of second arg, which should be a source language.  */
-  begin = skip_spaces (end);
+  cp = skip_spaces (cp);
 
-  if (*begin == '\0')
+  if (*cp == '\0')
     error (_("'%s': two arguments required -- "
 	     "filename extension and language"),
-	   ext_args.c_str ());
+	   ext_args);
 
   /* Lookup the language from among those we know.  */
-  language lang = language_enum (begin);
+  lang = language_enum (cp);
 
   auto it = filename_language_table.begin ();
   /* Now lookup the filename extension: do we already know it?  */
   for (; it != filename_language_table.end (); it++)
     {
-      if (it->ext == extension)
+      if (it->ext == ext_args)
 	break;
     }
 
   if (it == filename_language_table.end ())
     {
       /* New file extension.  */
-      add_filename_language (extension.data (), lang);
+      add_filename_language (ext_args, lang);
     }
   else
     {
@@ -3785,7 +3784,8 @@ test_set_ext_lang_command ()
   SELF_CHECK (lang == language_unknown);
 
   /* Test adding a new extension using the CLI command.  */
-  ext_args = ".hello rust";
+  auto args_holder = make_unique_xstrdup (".hello rust");
+  ext_args = args_holder.get ();
   set_ext_lang_command (NULL, 1, NULL);
 
   lang = deduce_language_from_filename ("cake.hello");
@@ -3793,7 +3793,8 @@ test_set_ext_lang_command ()
 
   /* Test overriding an existing extension using the CLI command.  */
   int size_before = filename_language_table.size ();
-  ext_args = ".hello pascal";
+  args_holder.reset (xstrdup (".hello pascal"));
+  ext_args = args_holder.get ();
   set_ext_lang_command (NULL, 1, NULL);
   int size_after = filename_language_table.size ();
 

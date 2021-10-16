@@ -32,6 +32,7 @@ save_vars { GDBFLAGS } {
 }
 
 if ![runto_main] {
+    untested "failed to run to main"
     return -1
 }
 

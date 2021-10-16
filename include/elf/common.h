@@ -672,17 +672,8 @@
 					/*   note name must be "LINUX".  */
 #define NT_ARM_PAC_MASK	0x406		/* AArch pointer authentication code masks */
 					/*   note name must be "LINUX".  */
-#define NT_ARM_PACA_KEYS  0x407		/* ARM pointer authentication address
-					   keys */
-					/*   note name must be "LINUX".  */
-#define NT_ARM_PACG_KEYS  0x408		/* ARM pointer authentication generic
-					   keys */
-					/*  note name must be "LINUX".  */
 #define NT_ARM_TAGGED_ADDR_CTRL	0x409	/* AArch64 tagged address control
 					   (prctl()) */
-					/*   note name must be "LINUX".  */
-#define NT_ARM_PAC_ENABLED_KEYS	0x40a	/* AArch64 pointer authentication
-					   enabled keys (prctl()) */
 					/*   note name must be "LINUX".  */
 #define NT_ARC_V2	0x600		/* ARC HS accumulator/extra registers.  */
 					/*   note name must be "LINUX".  */
@@ -742,29 +733,6 @@
 #define NT_OPENBSD_WCOOKIE	23
 
 
-/* Note segments for core files on Solaris systems.  Note name
-   must start with "CORE".  */
-#define SOLARIS_NT_PRSTATUS    1
-#define SOLARIS_NT_PRFPREG     2
-#define SOLARIS_NT_PRPSINFO    3
-#define SOLARIS_NT_PRXREG      4
-#define SOLARIS_NT_PLATFORM    5
-#define SOLARIS_NT_AUXV        6
-#define SOLARIS_NT_GWINDOWS    7
-#define SOLARIS_NT_ASRS        8
-#define SOLARIS_NT_LDT         9
-#define SOLARIS_NT_PSTATUS    10
-#define SOLARIS_NT_PSINFO     13
-#define SOLARIS_NT_PRCRED     14
-#define SOLARIS_NT_UTSNAME    15
-#define SOLARIS_NT_LWPSTATUS  16
-#define SOLARIS_NT_LWPSINFO   17
-#define SOLARIS_NT_PRPRIV     18
-#define SOLARIS_NT_PRPRIVINFO 19
-#define SOLARIS_NT_CONTENT    20
-#define SOLARIS_NT_ZONENAME   21
-#define SOLARIS_NT_PRCPUXREG  22
-
 /* Note segments for core files on SPU systems.  Note name
    must start with "SPU/".  */
 
@@ -817,13 +785,6 @@
    relocatable inputs.  */
 #define GNU_PROPERTY_UINT32_OR_LO	0xb0008000
 #define GNU_PROPERTY_UINT32_OR_HI	0xb000ffff
-
-/* The needed properties by the object file.  */
-#define GNU_PROPERTY_1_NEEDED		GNU_PROPERTY_UINT32_OR_LO
-
-/* Set if the object file requires canonical function pointers and
-   cannot be used with copy relocation.  */
-#define GNU_PROPERTY_1_NEEDED_INDIRECT_EXTERN_ACCESS	(1U << 0)
 
 /* Processor-specific semantics, lo */
 #define GNU_PROPERTY_LOPROC  0xc0000000

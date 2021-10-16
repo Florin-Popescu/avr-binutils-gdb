@@ -866,30 +866,6 @@ maintenance_set_worker_threads (const char *args, int from_tty,
   update_thread_pool_size ();
 }
 
-static void
-maintenance_show_worker_threads (struct ui_file *file, int from_tty,
-				 struct cmd_list_element *c,
-				 const char *value)
-{
-#if CXX_STD_THREAD
-  if (n_worker_threads == -1)
-    {
-      fprintf_filtered (file, _("The number of worker threads GDB "
-				"can use is unlimited (currently %zu).\n"),
-			gdb::thread_pool::g_thread_pool->thread_count ());
-      return;
-    }
-#endif
-
-  int report_threads = 0;
-#if CXX_STD_THREAD
-  report_threads = n_worker_threads;
-#endif
-  fprintf_filtered (file, _("The number of worker threads GDB "
-			    "can use is %d.\n"),
-		    report_threads);
-}
-
 
 /* If true, display time usage both at startup and for each command.  */
 
@@ -1112,7 +1088,7 @@ set_per_command_cmd (const char *args, int from_tty)
     error (_("Bad value for 'mt set per-command no'."));
 
   for (list = per_command_setlist; list != NULL; list = list->next)
-    if (list->var->type () == var_boolean)
+    if (list->var_type == var_boolean)
       {
 	gdb_assert (list->type == set_cmd);
 	do_set_command (args, from_tty, list);
@@ -1127,9 +1103,8 @@ static void
 maintenance_selftest (const char *args, int from_tty)
 {
 #if GDB_SELF_TEST
-  bool verbose = args != nullptr && check_for_argument (&args, "-verbose");
   gdb_argv argv (args);
-  selftests::run_tests (argv.as_array_view (), verbose);
+  selftests::run_tests (argv.as_array_view ());
 #else
   printf_filtered (_("\
 Selftests have been disabled for this build.\n"));
@@ -1396,8 +1371,7 @@ Set the number of worker threads GDB can use."), _("\
 Show the number of worker threads GDB can use."), _("\
 GDB may use multiple threads to speed up certain CPU-intensive operations,\n\
 such as demangling symbol names."),
-				       maintenance_set_worker_threads,
-				       maintenance_show_worker_threads,
+				       maintenance_set_worker_threads, NULL,
 				       &maintenance_set_cmdlist,
 				       &maintenance_show_cmdlist);
 

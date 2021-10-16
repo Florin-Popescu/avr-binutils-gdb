@@ -961,7 +961,7 @@ static void
 gen_ptradd (struct agent_expr *ax, struct axs_value *value,
 	    struct axs_value *value1, struct axs_value *value2)
 {
-  gdb_assert (value1->type->is_pointer_or_reference ());
+  gdb_assert (pointer_type (value1->type));
   gdb_assert (value2->type->code () == TYPE_CODE_INT);
 
   gen_scale (ax, aop_mul, value1->type);
@@ -977,7 +977,7 @@ static void
 gen_ptrsub (struct agent_expr *ax, struct axs_value *value,
 	    struct axs_value *value1, struct axs_value *value2)
 {
-  gdb_assert (value1->type->is_pointer_or_reference ());
+  gdb_assert (pointer_type (value1->type));
   gdb_assert (value2->type->code () == TYPE_CODE_INT);
 
   gen_scale (ax, aop_mul, value1->type);
@@ -994,8 +994,8 @@ gen_ptrdiff (struct agent_expr *ax, struct axs_value *value,
 	     struct axs_value *value1, struct axs_value *value2,
 	     struct type *result_type)
 {
-  gdb_assert (value1->type->is_pointer_or_reference ());
-  gdb_assert (value2->type->is_pointer_or_reference ());
+  gdb_assert (pointer_type (value1->type));
+  gdb_assert (pointer_type (value2->type));
 
   if (TYPE_LENGTH (TYPE_TARGET_TYPE (value1->type))
       != TYPE_LENGTH (TYPE_TARGET_TYPE (value2->type)))
@@ -1014,7 +1014,7 @@ gen_equal (struct agent_expr *ax, struct axs_value *value,
 	   struct axs_value *value1, struct axs_value *value2,
 	   struct type *result_type)
 {
-  if (value1->type->is_pointer_or_reference () || value2->type->is_pointer_or_reference ())
+  if (pointer_type (value1->type) || pointer_type (value2->type))
     ax_simple (ax, aop_equal);
   else
     gen_binop (ax, value, value1, value2,
@@ -1028,7 +1028,7 @@ gen_less (struct agent_expr *ax, struct axs_value *value,
 	  struct axs_value *value1, struct axs_value *value2,
 	  struct type *result_type)
 {
-  if (value1->type->is_pointer_or_reference () || value2->type->is_pointer_or_reference ())
+  if (pointer_type (value1->type) || pointer_type (value2->type))
     ax_simple (ax, aop_less_unsigned);
   else
     gen_binop (ax, value, value1, value2,
@@ -1095,7 +1095,7 @@ gen_deref (struct axs_value *value)
 {
   /* The caller should check the type, because several operators use
      this, and we don't know what error message to generate.  */
-  if (!value->type->is_pointer_or_reference ())
+  if (!pointer_type (value->type))
     internal_error (__FILE__, __LINE__,
 		    _("gen_deref: expected a pointer"));
 
@@ -1337,7 +1337,7 @@ gen_struct_ref_recursive (struct agent_expr *ax, struct axs_value *value,
 
   for (i = type->num_fields () - 1; i >= nbases; i--)
     {
-      const char *this_name = type->field (i).name ();
+      const char *this_name = TYPE_FIELD_NAME (type, i);
 
       if (this_name)
 	{
@@ -1401,7 +1401,7 @@ gen_struct_ref (struct agent_expr *ax, struct axs_value *value,
   /* Follow pointers until we reach a non-pointer.  These aren't the C
      semantics, but they're what the normal GDB evaluator does, so we
      should at least be consistent.  */
-  while (value->type->is_pointer_or_reference ())
+  while (pointer_type (value->type))
     {
       require_rvalue (ax, value);
       gen_deref (value);
@@ -1481,7 +1481,7 @@ gen_struct_elt_for_reference (struct agent_expr *ax, struct axs_value *value,
 
   for (i = t->num_fields () - 1; i >= TYPE_N_BASECLASSES (t); i--)
     {
-      const char *t_field_name = t->field (i).name ();
+      const char *t_field_name = TYPE_FIELD_NAME (t, i);
 
       if (t_field_name && strcmp (t_field_name, fieldname) == 0)
 	{
@@ -2070,13 +2070,13 @@ gen_expr_binop_rest (struct expression *exp,
     {
     case BINOP_ADD:
       if (value1->type->code () == TYPE_CODE_INT
-	  && value2->type->is_pointer_or_reference ())
+	  && pointer_type (value2->type))
 	{
 	  /* Swap the values and proceed normally.  */
 	  ax_simple (ax, aop_swap);
 	  gen_ptradd (ax, value, value2, value1);
 	}
-      else if (value1->type->is_pointer_or_reference ()
+      else if (pointer_type (value1->type)
 	       && value2->type->code () == TYPE_CODE_INT)
 	gen_ptradd (ax, value, value1, value2);
       else
@@ -2084,11 +2084,11 @@ gen_expr_binop_rest (struct expression *exp,
 		   aop_add, aop_add, 1, "addition");
       break;
     case BINOP_SUB:
-      if (value1->type->is_pointer_or_reference ()
+      if (pointer_type (value1->type)
 	  && value2->type->code () == TYPE_CODE_INT)
 	gen_ptrsub (ax,value, value1, value2);
-      else if (value1->type->is_pointer_or_reference ()
-	       && value2->type->is_pointer_or_reference ())
+      else if (pointer_type (value1->type)
+	       && pointer_type (value2->type))
 	/* FIXME --- result type should be ptrdiff_t */
 	gen_ptrdiff (ax, value, value1, value2,
 		     builtin_type (ax->gdbarch)->builtin_long);
@@ -2285,7 +2285,7 @@ gen_expr_unop (struct expression *exp,
     case UNOP_IND:
       lhs->generate_ax (exp, ax, value);
       gen_usual_unary (ax, value);
-      if (!value->type->is_pointer_or_reference ())
+      if (!pointer_type (value->type))
 	error (_("Argument of unary `*' is not a pointer."));
       gen_deref (value);
       break;

@@ -935,6 +935,17 @@ value_dynamic_cast (struct type *type, struct value *arg)
   error (_("dynamic_cast failed"));
 }
 
+/* Create a value of type TYPE that is zero, and return it.  */
+
+struct value *
+value_zero (struct type *type, enum lval_type lv)
+{
+  struct value *val = allocate_value (type);
+
+  VALUE_LVAL (val) = (lv == lval_computed ? not_lval : lv);
+  return val;
+}
+
 /* Create a not_lval value of numeric type TYPE that is one, and return it.  */
 
 struct value *
@@ -1186,15 +1197,14 @@ value_assign (struct value *toval, struct value *fromval)
 	struct gdbarch *gdbarch;
 	int value_reg;
 
-	/* Figure out which frame this register value is in.  The value
-	   holds the frame_id for the next frame, that is the frame this
-	   register value was unwound from.
-
-	   Below we will call put_frame_register_bytes which requires that
-	   we pass it the actual frame in which the register value is
-	   valid, i.e. not the next frame.  */
-	frame = frame_find_by_id (VALUE_NEXT_FRAME_ID (toval));
-	frame = get_prev_frame_always (frame);
+	/* Figure out which frame this is in currently.
+	
+	   We use VALUE_FRAME_ID for obtaining the value's frame id instead of
+	   VALUE_NEXT_FRAME_ID due to requiring a frame which may be passed to
+	   put_frame_register_bytes() below.  That function will (eventually)
+	   perform the necessary unwind operation by first obtaining the next
+	   frame.  */
+	frame = frame_find_by_id (VALUE_FRAME_ID (toval));
 
 	value_reg = VALUE_REGNUM (toval);
 
@@ -1982,7 +1992,7 @@ struct_field_searcher::search (struct value *arg1, LONGEST offset,
   if (!m_looking_for_baseclass)
     for (i = type->num_fields () - 1; i >= nbases; i--)
       {
-	const char *t_field_name = type->field (i).name ();
+	const char *t_field_name = TYPE_FIELD_NAME (type, i);
 
 	if (t_field_name && (strcmp_iw (t_field_name, m_name) == 0))
 	  {
@@ -2324,7 +2334,7 @@ value_struct_elt (struct value **argp,
 
   /* Follow pointers until we get to a non-pointer.  */
 
-  while (t->is_pointer_or_reference ())
+  while (t->code () == TYPE_CODE_PTR || TYPE_IS_REFERENCE (t))
     {
       *argp = value_ind (*argp);
       /* Don't coerce fn pointer to fn and then back again!  */
@@ -2411,7 +2421,7 @@ value_struct_elt_bitpos (struct value **argp, int bitpos, struct type *ftype,
 
   t = check_typedef (value_type (*argp));
 
-  while (t->is_pointer_or_reference ())
+  while (t->code () == TYPE_CODE_PTR || TYPE_IS_REFERENCE (t))
     {
       *argp = value_ind (*argp);
       if (check_typedef (value_type (*argp))->code () != TYPE_CODE_FUNC)
@@ -2564,7 +2574,7 @@ value_find_oload_method_list (struct value **argp, const char *method,
   t = check_typedef (value_type (*argp));
 
   /* Code snarfed from value_struct_elt.  */
-  while (t->is_pointer_or_reference ())
+  while (t->code () == TYPE_CODE_PTR || TYPE_IS_REFERENCE (t))
     {
       *argp = value_ind (*argp);
       /* Don't coerce fn pointer to fn and then back again!  */
@@ -2958,7 +2968,8 @@ find_overload_match (gdb::array_view<value *> args,
       struct type *objtype = check_typedef (obj_type);
 
       if (temp_type->code () != TYPE_CODE_PTR
-	  && objtype->is_pointer_or_reference ())
+	  && (objtype->code () == TYPE_CODE_PTR
+	      || TYPE_IS_REFERENCE (objtype)))
 	{
 	  temp = value_addr (temp);
 	}
@@ -3326,7 +3337,7 @@ enum_constant_from_type (struct type *type, const char *name)
 
   for (i = TYPE_N_BASECLASSES (type); i < type->num_fields (); ++i)
     {
-      const char *fname = type->field (i).name ();
+      const char *fname = TYPE_FIELD_NAME (type, i);
       int len;
 
       if (TYPE_FIELD_LOC_KIND (type, i) != FIELD_LOC_KIND_ENUMVAL
@@ -3498,7 +3509,7 @@ value_struct_elt_for_reference (struct type *domain, int offset,
 
   for (i = t->num_fields () - 1; i >= TYPE_N_BASECLASSES (t); i--)
     {
-      const char *t_field_name = t->field (i).name ();
+      const char *t_field_name = TYPE_FIELD_NAME (t, i);
 
       if (t_field_name && strcmp (t_field_name, name) == 0)
 	{

@@ -63,8 +63,12 @@ proc dtrace_test {} {
     # Since test:progress-counter is disabled we can run to the second
     # instance of the test:two-locations probe.
 
-    runto "-probe-dtrace test:two-locations"]
-    runto "-probe-dtrace test:two-locations"]
+    if {![runto "-probe-dtrace test:two-locations"]} {
+	fail "run to the first test:two-locations probe point"
+    }
+    if {![runto "-probe-dtrace test:two-locations"]} {
+	fail "run to the second test:two-locations probe point"
+    }
 
     # Go back to the breakpoint on main() and enable the
     # test:progress-counter probe.  Set a breakpoint on it and see

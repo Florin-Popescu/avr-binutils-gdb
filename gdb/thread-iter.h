@@ -20,16 +20,13 @@
 #define THREAD_ITER_H
 
 #include "gdbsupport/filtered-iterator.h"
-#include "gdbsupport/iterator-range.h"
 #include "gdbsupport/next-iterator.h"
-#include "gdbsupport/reference-to-pointer-iterator.h"
 #include "gdbsupport/safe-iterator.h"
 
 /* A forward iterator that iterates over a given inferior's
    threads.  */
 
-using inf_threads_iterator
-  = reference_to_pointer_iterator<intrusive_list<thread_info>::iterator>;
+using inf_threads_iterator = next_iterator<thread_info>;
 
 /* A forward iterator that iterates over all threads of all
    inferiors.  */
@@ -99,7 +96,12 @@ public:
 				 ptid_t filter_ptid);
 
   /* Create a one-past-end iterator.  */
-  all_matching_threads_iterator () = default;
+  all_matching_threads_iterator ()
+    : m_inf (nullptr),
+      m_thr (nullptr),
+      m_filter_target (nullptr),
+      m_filter_ptid (minus_one_ptid)
+  {}
 
   thread_info *operator* () const { return m_thr; }
 
@@ -119,30 +121,20 @@ private:
   /* Advance to next thread, skipping filtered threads.  */
   void advance ();
 
-  /* True if M_INF has the process target M_FILTER_TARGET.  */
+  /* True if M_INF matches the process identified by
+     M_FILTER_PTID.  */
   bool m_inf_matches ();
 
 private:
-  enum class mode
-  {
-    /* All threads, possibly filtered down to a single target.  */
-    ALL_THREADS,
-
-    /* All threads of the given inferior.  */
-    ALL_THREADS_OF_INFERIOR,
-
-    /* A specific thread.  */
-    SINGLE_THREAD,
-  } m_mode;
-
   /* The current inferior.  */
-  inferior *m_inf = nullptr;
+  inferior *m_inf;
 
   /* The current thread.  */
-  thread_info *m_thr = nullptr;
+  thread_info *m_thr;
 
-  /* The target we filter on (may be nullptr).  */
+  /* The filter.  */
   process_stratum_target *m_filter_target;
+  ptid_t m_filter_ptid;
 };
 
 /* Filter for filtered_iterator.  Filters out exited threads.  */
@@ -178,24 +170,43 @@ using safe_inf_threads_iterator
 /* A range adapter that makes it possible to iterate over all threads
    of an inferior with range-for.  */
 
-using inf_threads_range = iterator_range<inf_threads_iterator>;
+using inf_threads_range
+  = next_adapter<thread_info, inf_threads_iterator>;
 
 /* A range adapter that makes it possible to iterate over all
    non-exited threads of an inferior with range-for.  */
 
 using inf_non_exited_threads_range
-  = iterator_range<inf_non_exited_threads_iterator>;
+  = next_adapter<thread_info, inf_non_exited_threads_iterator>;
 
 /* A range adapter that makes it possible to iterate over all threads
    of an inferior with range-for, safely.  */
 
-using safe_inf_threads_range = iterator_range<safe_inf_threads_iterator>;
+using safe_inf_threads_range
+  = next_adapter<thread_info, safe_inf_threads_iterator>;
+
+/* A range adapter that makes it possible to iterate over all threads
+   of all inferiors with range-for.  */
+
+struct all_threads_range
+{
+  all_threads_iterator begin () const
+  { return all_threads_iterator (all_threads_iterator::begin_t {}); }
+  all_threads_iterator end () const
+  { return all_threads_iterator (); }
+};
 
 /* A range adapter that makes it possible to iterate over all threads
    with range-for "safely".  I.e., it is safe to delete the
    currently-iterated thread.  */
 
-using all_threads_safe_range = iterator_range<all_threads_safe_iterator>;
+struct all_threads_safe_range
+{
+  all_threads_safe_iterator begin () const
+  { return all_threads_safe_iterator (all_threads_iterator::begin_t {}); }
+  all_threads_safe_iterator end () const
+  { return all_threads_safe_iterator (); }
+};
 
 /* A range adapter that makes it possible to iterate over all threads
    that match a PTID filter with range-for.  */

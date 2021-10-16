@@ -868,7 +868,12 @@ tc_gen_reloc (asection *seg ATTRIBUTE_UNUSED, fixS *fixp)
   arelent *reloc;
   reloc = XNEW (arelent);
   reloc->sym_ptr_ptr = XNEW (asymbol *);
-  *reloc->sym_ptr_ptr = symbol_get_bfdsym (fixp->fx_addsy);
+  if (fixp->fx_addsy)
+    *reloc->sym_ptr_ptr = symbol_get_bfdsym (fixp->fx_addsy);
+  else if (fixp->fx_subsy)
+    *reloc->sym_ptr_ptr = symbol_get_bfdsym (fixp->fx_subsy);
+  else
+    abort ();
   reloc->address = fixp->fx_frag->fr_address + fixp->fx_where;
   reloc->howto = bfd_reloc_type_lookup (stdoutput, fixp->fx_r_type);
   if (reloc->howto == (reloc_howto_type *) NULL)
@@ -876,8 +881,6 @@ tc_gen_reloc (asection *seg ATTRIBUTE_UNUSED, fixS *fixp)
       as_bad_where (fixp->fx_file, fixp->fx_line,
 		    _("reloc %d not supported by object file format"),
 		    (int) fixp->fx_r_type);
-      free (reloc->sym_ptr_ptr);
-      free (reloc);
       return NULL;
     }
   reloc->addend = fixp->fx_addnumber;
@@ -954,7 +957,7 @@ md_apply_fix (fixS *fixP, valueT *valP, segT seg ATTRIBUTE_UNUSED)
   if (fixP->fx_subsy != (symbolS *) NULL)
     {
       /* We can't actually support subtracting a symbol.  */
-      as_bad_subtract (fixP);
+      as_bad_where (fixP->fx_file, fixP->fx_line, _("expression too complex"));
     }
 
   if (fixP->fx_addsy != NULL)

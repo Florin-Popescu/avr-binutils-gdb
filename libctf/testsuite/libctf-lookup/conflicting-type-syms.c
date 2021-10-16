@@ -12,6 +12,9 @@ main (int argc, char *argv[])
   int err;
   ctf_id_t a, b, ignore1, ignore2, tmp;
   char *foo;
+  ctf_next_t *i = NULL;
+  const char *name;
+  int val;
 
   if (argc != 2)
     {

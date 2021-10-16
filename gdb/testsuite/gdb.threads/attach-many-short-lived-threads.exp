@@ -62,6 +62,8 @@ proc test {} {
     global gdb_prompt
     global decimal
 
+    clean_restart ${binfile}
+
     set test_spawn_id [spawn_wait_for_attach $binfile]
     set testpid [spawn_id_get_pid $test_spawn_id]
 
@@ -168,8 +170,7 @@ proc test {} {
 # failure.
 set options { "additional_flags=-DTIMEOUT=$timeout" debug pthreads }
 
-if {[prepare_for_testing "failed to prepare" $testfile $srcfile \
-	 $options] == -1} {
+if {[prepare_for_testing "failed to prepare" $testfile $srcfile $options] == -1} {
     return -1
 }
 

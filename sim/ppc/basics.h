@@ -71,7 +71,7 @@ typedef enum {
 
 /* Basic configuration */
 
-#include "std-config.h"
+#include "ppc-config.h"
 #include "inline.h"
 
 

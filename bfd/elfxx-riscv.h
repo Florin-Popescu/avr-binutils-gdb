@@ -23,7 +23,6 @@
 #include "elf/common.h"
 #include "elf/internal.h"
 #include "opcode/riscv.h"
-#include "cpu-riscv.h"
 
 #define RISCV_UNKNOWN_VERSION -1
 
@@ -72,13 +71,18 @@ typedef struct
   void (*error_handler) (const char *,
 			 ...) ATTRIBUTE_PRINTF_1;
   unsigned *xlen;
-  enum riscv_spec_class isa_spec;
+  void (*get_default_version) (const char *,
+			       int *,
+			       int *);
   bool check_unknown_prefixed_ext;
 } riscv_parse_subset_t;
 
 extern bool
 riscv_parse_subset (riscv_parse_subset_t *,
 		    const char *);
+
+extern const char *
+riscv_supported_std_ext (void);
 
 extern void
 riscv_release_subset_list (riscv_subset_list_t *);

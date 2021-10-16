@@ -133,7 +133,7 @@ public:
 
   void post_attach (int) override;
 
-  void follow_fork (inferior *, ptid_t, target_waitkind, bool, bool) override;
+  void follow_fork (bool, bool) override;
 
   std::vector<static_tracepoint_marker>
     static_tracepoint_markers_by_strid (const char *id) override;
@@ -196,34 +196,26 @@ extern linux_nat_target *linux_target;
 
 struct arch_lwp_info;
 
-/* Structure describing an LWP.  */
+/* Structure describing an LWP.  This is public only for the purposes
+   of ALL_LWPS; target-specific code should generally not access it
+   directly.  */
 
-struct lwp_info : intrusive_list_node<lwp_info>
+struct lwp_info
 {
-  lwp_info (ptid_t ptid)
-    : ptid (ptid)
-  {
-    waitstatus.kind = TARGET_WAITKIND_IGNORE;
-  }
-
-  ~lwp_info ();
-
-  DISABLE_COPY_AND_ASSIGN (lwp_info);
-
   /* The process id of the LWP.  This is a combination of the LWP id
      and overall process id.  */
   ptid_t ptid;
 
   /* If this flag is set, we need to set the event request flags the
      next time we see this LWP stop.  */
-  int must_set_ptrace_flags = 0;
+  int must_set_ptrace_flags;
 
   /* Non-zero if we sent this LWP a SIGSTOP (but the LWP didn't report
      it back yet).  */
-  int signalled = 0;
+  int signalled;
 
   /* Non-zero if this LWP is stopped.  */
-  int stopped = 0;
+  int stopped;
 
   /* Non-zero if this LWP will be/has been resumed.  Note that an LWP
      can be marked both as stopped and resumed at the same time.  This
@@ -231,38 +223,38 @@ struct lwp_info : intrusive_list_node<lwp_info>
      pending.  We shouldn't let the LWP run until that wait status has
      been processed, but we should not report that wait status if GDB
      didn't try to let the LWP run.  */
-  int resumed = 0;
+  int resumed;
 
   /* The last resume GDB requested on this thread.  */
-  resume_kind last_resume_kind = resume_continue;
+  enum resume_kind last_resume_kind;
 
   /* If non-zero, a pending wait status.  */
-  int status = 0;
+  int status;
 
   /* When 'stopped' is set, this is where the lwp last stopped, with
      decr_pc_after_break already accounted for.  If the LWP is
      running and stepping, this is the address at which the lwp was
      resumed (that is, it's the previous stop PC).  If the LWP is
      running and not stepping, this is 0.  */
-  CORE_ADDR stop_pc = 0;
+  CORE_ADDR stop_pc;
 
   /* Non-zero if we were stepping this LWP.  */
-  int step = 0;
+  int step;
 
   /* The reason the LWP last stopped, if we need to track it
      (breakpoint, watchpoint, etc.).  */
-  target_stop_reason stop_reason = TARGET_STOPPED_BY_NO_REASON;
+  enum target_stop_reason stop_reason;
 
   /* On architectures where it is possible to know the data address of
      a triggered watchpoint, STOPPED_DATA_ADDRESS_P is non-zero, and
      STOPPED_DATA_ADDRESS contains such data address.  Otherwise,
      STOPPED_DATA_ADDRESS_P is false, and STOPPED_DATA_ADDRESS is
      undefined.  Only valid if STOPPED_BY_WATCHPOINT is true.  */
-  int stopped_data_address_p = 0;
-  CORE_ADDR stopped_data_address = 0;
+  int stopped_data_address_p;
+  CORE_ADDR stopped_data_address;
 
   /* Non-zero if we expect a duplicated SIGINT.  */
-  int ignore_sigint = 0;
+  int ignore_sigint;
 
   /* If WAITSTATUS->KIND != TARGET_WAITKIND_SPURIOUS, the waitstatus
      for this LWP's last event.  This may correspond to STATUS above,
@@ -277,29 +269,33 @@ struct lwp_info : intrusive_list_node<lwp_info>
   enum target_waitkind syscall_state;
 
   /* The processor core this LWP was last seen on.  */
-  int core = -1;
+  int core;
 
   /* Arch-specific additions.  */
-  struct arch_lwp_info *arch_private = nullptr;
+  struct arch_lwp_info *arch_private;
+
+  /* Previous and next pointers in doubly-linked list of known LWPs,
+     sorted by reverse creation order.  */
+  struct lwp_info *prev;
+  struct lwp_info *next;
 };
 
-/* lwp_info iterator and range types.  */
-
-using lwp_info_iterator
-  = reference_to_pointer_iterator<intrusive_list<lwp_info>::iterator>;
-using lwp_info_range = iterator_range<lwp_info_iterator>;
-using lwp_info_safe_range = basic_safe_range<lwp_info_range>;
-
-/* Get an iterable range over all lwps.  */
-
-lwp_info_range all_lwps ();
-
-/* Same as the above, but safe against deletion while iterating.  */
-
-lwp_info_safe_range all_lwps_safe ();
+/* The global list of LWPs, for ALL_LWPS.  Unlike the threads list,
+   there is always at least one LWP on the list while the GNU/Linux
+   native target is active.  */
+extern struct lwp_info *lwp_list;
 
 /* Does the current host support PTRACE_GETREGSET?  */
 extern enum tribool have_ptrace_getregset;
+
+/* Iterate over each active thread (light-weight process).  */
+#define ALL_LWPS(LP)							\
+  for ((LP) = lwp_list;							\
+       (LP) != NULL;							\
+       (LP) = (LP)->next)
+
+/* Attempt to initialize libthread_db.  */
+void check_for_thread_db (void);
 
 /* Called from the LWP layer to inform the thread_db layer that PARENT
    spawned CHILD.  Both LWPs are currently stopped.  This function

@@ -20,6 +20,7 @@ if { [prepare_for_testing "failed to prepare" $testfile $srcfile] } {
 }
 
 if { ![runto_main] } {
+    fail "can't run to main"
     return -1
 }
 
@@ -34,6 +35,7 @@ gdb_test "info program" "Program stopped at $hex\.\r\nIt stopped after being ste
     "info program after next"
 
 if { ![runto_main] } then {
+    fail "can't restart program"
     return -1
 }
 

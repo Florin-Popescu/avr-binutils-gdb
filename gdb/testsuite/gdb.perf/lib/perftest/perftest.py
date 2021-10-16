@@ -18,8 +18,7 @@ from __future__ import absolute_import
 import perftest.testresult as testresult
 import perftest.reporter as reporter
 from perftest.measure import Measure
-from perftest.measure import MeasurementPerfCounter
-from perftest.measure import MeasurementProcessTime
+from perftest.measure import MeasurementCpuTime
 from perftest.measure import MeasurementWallTime
 from perftest.measure import MeasurementVmSize
 
@@ -73,8 +72,7 @@ class TestCaseWithBasicMeasurements(TestCase):
     def __init__(self, name):
         result_factory = testresult.SingleStatisticResultFactory()
         measurements = [
-            MeasurementPerfCounter(result_factory.create_result()),
-            MeasurementProcessTime(result_factory.create_result()),
+            MeasurementCpuTime(result_factory.create_result()),
             MeasurementWallTime(result_factory.create_result()),
             MeasurementVmSize(result_factory.create_result()),
         ]

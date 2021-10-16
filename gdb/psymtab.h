@@ -104,7 +104,7 @@ public:
 
   void install_psymtab (partial_symtab *pst);
 
-  using partial_symtab_range = next_range<partial_symtab>;
+  typedef next_adapter<struct partial_symtab> partial_symtab_range;
 
   /* A range adapter that makes it possible to iterate over all
      psymtabs in one objfile.  */

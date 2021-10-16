@@ -21,7 +21,6 @@
 #include "common-debug.h"
 #include "selftest.h"
 #include <map>
-#include <functional>
 
 namespace selftests
 {
@@ -30,6 +29,22 @@ namespace selftests
    exists.  */
 
 static std::map<std::string, std::unique_ptr<selftest>> tests;
+
+/* A selftest that calls the test function without arguments.  */
+
+struct simple_selftest : public selftest
+{
+  simple_selftest (self_test_function *function_)
+  : function (function_)
+  {}
+
+  void operator() () const override
+  {
+    function ();
+  }
+
+  self_test_function *function;
+};
 
 /* See selftest.h.  */
 
@@ -42,51 +57,20 @@ register_test (const std::string &name, selftest *test)
   tests[name] = std::unique_ptr<selftest> (test);
 }
 
-/* A selftest that calls the test function without arguments.  */
-
-struct lambda_selftest : public selftest
-{
-  lambda_selftest (std::function<void(void)> function_)
-  {
-    function  = function_;
-  }
-
-  void operator() () const override
-  {
-    function ();
-  }
-
-  std::function<void(void)> function;
-};
-
 /* See selftest.h.  */
 
 void
-register_test (const std::string &name,
-	       std::function<void(void)> function)
+register_test (const std::string &name, self_test_function *function)
 {
-  register_test (name, new lambda_selftest (function));
-}
-
-/* See selftest.h.  */
-
-static bool run_verbose_ = false;
-
-/* See selftest.h.  */
-
-bool
-run_verbose ()
-{
-  return run_verbose_;
+  register_test (name, new simple_selftest (function));
 }
 
 /* See selftest.h.  */
 
 void
-run_tests (gdb::array_view<const char *const> filters, bool verbose)
+run_tests (gdb::array_view<const char *const> filters)
 {
   int ran = 0, failed = 0;
-  run_verbose_ = verbose;
 
   for (const auto &pair : tests)
     {

@@ -80,6 +80,7 @@ remote_close target
 clean_restart $binfile
 
 if { ! [ runto_main ] } then {
+    untested "failed to compile"
     return -1
 }
 

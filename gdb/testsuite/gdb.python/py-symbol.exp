@@ -105,6 +105,7 @@ gdb_test "python print (gdb.lookup_static_symbol ('qq') is None)" \
     "True" "lookup_static_symbol for global var"
 
 if ![runto_main] then {
+    fail "can't run to main"
     return 0
 }
 
@@ -213,6 +214,7 @@ gdb_test "python print (gdb.lookup_static_symbol ('(anonymous namespace)::anon')
     "10" "print value of anon"
 
 if ![runto_main] then {
+    fail "can't run to main"
     return 0
 }
 
@@ -241,6 +243,7 @@ gdb_test "python print (cplusfunc.addr_class == gdb.SYMBOL_LOC_BLOCK)" "True" "t
 # Start with a fresh gdb.
 clean_restart ${binfile}
 if ![runto_main] then {
+    fail "cannot run to main."
     return 0
 }
 

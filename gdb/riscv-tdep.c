@@ -1409,9 +1409,6 @@ public:
       LUI,
       SD,
       SW,
-      LD,
-      LW,
-      MV,
       /* These are needed for software breakpoint support.  */
       JAL,
       JALR,
@@ -1424,8 +1421,6 @@ public:
       /* These are needed for stepping over atomic sequences.  */
       LR,
       SC,
-      /* This instruction is used to do a syscall.  */
-      ECALL,
 
       /* Other instructions are not interesting during the prologue scan, and
 	 are ignored.  */
@@ -1520,15 +1515,6 @@ private:
     m_opcode = opcode;
     m_rd = m_rs1 = decode_register_index (ival, OP_SH_CRS1S);
     m_imm.s = EXTRACT_CITYPE_IMM (ival);
-  }
-
-  /* Helper for DECODE, decode 16-bit compressed CL-type instruction.  */
-  void decode_cl_type_insn (enum opcode opcode, ULONGEST ival)
-  {
-    m_opcode = opcode;
-    m_rd = decode_register_index_short (ival, OP_SH_CRS2S);
-    m_rs1 = decode_register_index_short (ival, OP_SH_CRS1S);
-    m_imm.s = EXTRACT_CLTYPE_IMM (ival);
   }
 
   /* Helper for DECODE, decode 32-bit S-type instruction.  */
@@ -1725,12 +1711,6 @@ riscv_insn::decode (struct gdbarch *gdbarch, CORE_ADDR pc)
 	decode_r_type_insn (SC, ival);
       else if (is_sc_d_insn (ival))
 	decode_r_type_insn (SC, ival);
-      else if (is_ecall_insn (ival))
-	decode_i_type_insn (ECALL, ival);
-      else if (is_ld_insn (ival))
-	decode_i_type_insn (LD, ival);
-      else if (is_lw_insn (ival))
-	decode_i_type_insn (LW, ival);
       else
 	/* None of the other fields are valid in this case.  */
 	m_opcode = OTHER;
@@ -1790,21 +1770,15 @@ riscv_insn::decode (struct gdbarch *gdbarch, CORE_ADDR pc)
       else if (xlen != 4 && is_c_sdsp_insn (ival))
 	decode_css_type_insn (SD, ival, EXTRACT_CSSTYPE_SDSP_IMM (ival));
       /* C_JR and C_MV have the same opcode.  If RS2 is 0, then this is a C_JR.
-	 So must try to match C_JR first as it has more bits in mask.  */
+	 So must try to match C_JR first as it ahs more bits in mask.  */
       else if (is_c_jr_insn (ival))
 	decode_cr_type_insn (JALR, ival);
-      else if (is_c_mv_insn (ival))
-	decode_cr_type_insn (MV, ival);
       else if (is_c_j_insn (ival))
 	decode_cj_type_insn (JAL, ival);
       else if (is_c_beqz_insn (ival))
 	decode_cb_type_insn (BEQ, ival);
       else if (is_c_bnez_insn (ival))
 	decode_cb_type_insn (BNE, ival);
-      else if (is_c_ld_insn (ival))
-	decode_cl_type_insn (LD, ival);
-      else if (is_c_lw_insn (ival))
-	decode_cl_type_insn (LW, ival);
       else
 	/* None of the other fields of INSN are valid in this case.  */
 	m_opcode = OTHER;
@@ -1947,33 +1921,11 @@ riscv_scan_prologue (struct gdbarch *gdbarch,
 	}
       else if (insn.opcode () == riscv_insn::ADD)
 	{
-	  /* Handle: add REG1, REG2, REG3  */
+	  /* Handle: addi REG1, REG2, IMM  */
 	  gdb_assert (insn.rd () < RISCV_NUM_INTEGER_REGS);
 	  gdb_assert (insn.rs1 () < RISCV_NUM_INTEGER_REGS);
 	  gdb_assert (insn.rs2 () < RISCV_NUM_INTEGER_REGS);
 	  regs[insn.rd ()] = pv_add (regs[insn.rs1 ()], regs[insn.rs2 ()]);
-	}
-      else if (insn.opcode () == riscv_insn::LD
-	       || insn.opcode () == riscv_insn::LW)
-	{
-	  /* Handle: ld reg, offset(rs1)
-	     or:     c.ld reg, offset(rs1)
-	     or:     lw reg, offset(rs1)
-	     or:     c.lw reg, offset(rs1)  */
-	  gdb_assert (insn.rd () < RISCV_NUM_INTEGER_REGS);
-	  gdb_assert (insn.rs1 () < RISCV_NUM_INTEGER_REGS);
-	  regs[insn.rd ()]
-	    = stack.fetch (pv_add_constant (regs[insn.rs1 ()],
-					    insn.imm_signed ()),
-			   (insn.opcode () == riscv_insn::LW ? 4 : 8));
-	}
-      else if (insn.opcode () == riscv_insn::MV)
-	{
-	  /* Handle: c.mv RD, RS2  */
-	  gdb_assert (insn.rd () < RISCV_NUM_INTEGER_REGS);
-	  gdb_assert (insn.rs2 () < RISCV_NUM_INTEGER_REGS);
-	  gdb_assert (insn.rs2 () > 0);
-	  regs[insn.rd ()] = regs[insn.rs2 ()];
 	}
       else
 	{
@@ -3812,7 +3764,6 @@ static CORE_ADDR
 riscv_next_pc (struct regcache *regcache, CORE_ADDR pc)
 {
   struct gdbarch *gdbarch = regcache->arch ();
-  const struct gdbarch_tdep *tdep = gdbarch_tdep (gdbarch);
   struct riscv_insn insn;
   CORE_ADDR next_pc;
 
@@ -3874,11 +3825,6 @@ riscv_next_pc (struct regcache *regcache, CORE_ADDR pc)
       regcache->cooked_read (insn.rs2 (), &src2);
       if (src1 >= src2)
 	next_pc = pc + insn.imm_signed ();
-    }
-  else if (insn.opcode () == riscv_insn::ECALL)
-    {
-      if (tdep->syscall_next_pc != nullptr)
-	next_pc = tdep->syscall_next_pc (get_current_frame ());
     }
 
   return next_pc;

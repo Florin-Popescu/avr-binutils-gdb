@@ -31,6 +31,7 @@ if {[prepare_for_testing $testfile.exp $testfile $srcfile \
 }
 
 if {![runto_main]} {
+    untested "couldn't run to main"
     return -1
 }
 

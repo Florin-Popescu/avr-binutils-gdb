@@ -71,16 +71,16 @@ static void step_1 (int, int, const char *);
    Arguments are separated by spaces.  Empty string (pointer to '\0')
    means no args.  */
 
-static std::string inferior_args_scratch;
+static char *inferior_args_scratch;
 
 /* Scratch area where the new cwd will be stored by 'set cwd'.  */
 
-static std::string inferior_cwd_scratch;
+static char *inferior_cwd_scratch;
 
 /* Scratch area where 'set inferior-tty' will store user-provided value.
    We'll immediate copy it into per-inferior storage.  */
 
-static std::string inferior_io_terminal_scratch;
+static char *inferior_io_terminal_scratch;
 
 /* Pid of our debugged inferior, or 0 if no inferior now.
    Since various parts of infrun.c test this to see whether there is a program
@@ -115,19 +115,52 @@ show_inferior_tty_command (struct ui_file *file, int from_tty,
 {
   /* Note that we ignore the passed-in value in favor of computing it
      directly.  */
-  const std::string &inferior_tty = current_inferior ()->tty ();
+  const char *inferior_tty = current_inferior ()->tty ();
 
+  if (inferior_tty == nullptr)
+    inferior_tty = "";
   fprintf_filtered (gdb_stdout,
 		    _("Terminal for future runs of program being debugged "
-		      "is \"%s\".\n"), inferior_tty.c_str ());
+		      "is \"%s\".\n"), inferior_tty);
+}
+
+const char *
+get_inferior_args (void)
+{
+  if (current_inferior ()->argc != 0)
+    {
+      gdb::array_view<char * const> args (current_inferior ()->argv,
+					  current_inferior ()->argc);
+      std::string n = construct_inferior_arguments (args);
+      set_inferior_args (n.c_str ());
+    }
+
+  if (current_inferior ()->args == NULL)
+    current_inferior ()->args = make_unique_xstrdup ("");
+
+  return current_inferior ()->args.get ();
+}
+
+/* Set the arguments for the current inferior.  Ownership of
+   NEWARGS is not transferred.  */
+
+void
+set_inferior_args (const char *newargs)
+{
+  if (newargs != nullptr)
+    current_inferior ()->args = make_unique_xstrdup (newargs);
+  else
+    current_inferior ()->args.reset ();
+
+  current_inferior ()->argc = 0;
+  current_inferior ()->argv = 0;
 }
 
 void
 set_inferior_args_vector (int argc, char **argv)
 {
-  gdb::array_view<char * const> args (argv, argc);
-  std::string n = construct_inferior_arguments (args);
-  current_inferior ()->set_args (std::move (n));
+  current_inferior ()->argc = argc;
+  current_inferior ()->argv = argv;
 }
 
 /* Notice when `set args' is run.  */
@@ -137,7 +170,7 @@ set_args_command (const char *args, int from_tty, struct cmd_list_element *c)
 {
   /* CLI has assigned the user-provided value to inferior_args_scratch.
      Now route it to current inferior.  */
-  current_inferior ()->set_args (inferior_args_scratch);
+  set_inferior_args (inferior_args_scratch);
 }
 
 /* Notice when `show args' is run.  */
@@ -148,16 +181,30 @@ show_args_command (struct ui_file *file, int from_tty,
 {
   /* Note that we ignore the passed-in value in favor of computing it
      directly.  */
-  deprecated_show_value_hack (file, from_tty, c,
-			      current_inferior ()->args ().c_str ());
+  deprecated_show_value_hack (file, from_tty, c, get_inferior_args ());
 }
 
 /* See gdbsupport/common-inferior.h.  */
 
-const std::string &
+void
+set_inferior_cwd (const char *cwd)
+{
+  struct inferior *inf = current_inferior ();
+
+  gdb_assert (inf != NULL);
+
+  if (cwd == NULL)
+    inf->cwd.reset ();
+  else
+    inf->cwd.reset (xstrdup (cwd));
+}
+
+/* See gdbsupport/common-inferior.h.  */
+
+const char *
 get_inferior_cwd ()
 {
-  return current_inferior ()->cwd ();
+  return current_inferior ()->cwd.get ();
 }
 
 /* Handle the 'set cwd' command.  */
@@ -165,7 +212,10 @@ get_inferior_cwd ()
 static void
 set_cwd_command (const char *args, int from_tty, struct cmd_list_element *c)
 {
-  current_inferior ()->set_cwd (inferior_cwd_scratch);
+  if (*inferior_cwd_scratch == '\0')
+    set_inferior_cwd (NULL);
+  else
+    set_inferior_cwd (inferior_cwd_scratch);
 }
 
 /* Handle the 'show cwd' command.  */
@@ -174,9 +224,9 @@ static void
 show_cwd_command (struct ui_file *file, int from_tty,
 		  struct cmd_list_element *c, const char *value)
 {
-  const std::string &cwd = current_inferior ()->cwd ();
+  const char *cwd = get_inferior_cwd ();
 
-  if (cwd.empty ())
+  if (cwd == NULL)
     fprintf_filtered (gdb_stdout,
 		      _("\
 You have not set the inferior's current working directory.\n\
@@ -185,8 +235,7 @@ server's cwd if remote debugging.\n"));
   else
     fprintf_filtered (gdb_stdout,
 		      _("Current working directory that will be used "
-			"when starting the inferior is \"%s\".\n"),
-		      cwd.c_str ());
+			"when starting the inferior is \"%s\".\n"), cwd);
 }
 
 
@@ -249,11 +298,11 @@ post_create_inferior (int from_tty)
      missing registers info), ignore it.  */
   thread_info *thr = inferior_thread ();
 
-  thr->clear_stop_pc ();
+  thr->suspend.stop_pc = 0;
   try
     {
       regcache *rc = get_thread_regcache (thr);
-      thr->set_stop_pc (regcache_read_pc (rc));
+      thr->suspend.stop_pc = regcache_read_pc (rc);
     }
   catch (const gdb_exception_error &ex)
     {
@@ -431,7 +480,7 @@ run_command_1 (const char *args, int from_tty, enum run_how run_how)
 
   /* If there were other args, beside '&', process them.  */
   if (args != NULL)
-    current_inferior ()->set_args (args);
+    set_inferior_args (args);
 
   if (from_tty)
     {
@@ -440,13 +489,17 @@ run_command_1 (const char *args, int from_tty, enum run_how run_how)
       if (exec_file)
 	uiout->field_string ("execfile", exec_file);
       uiout->spaces (1);
-      uiout->field_string ("infargs", current_inferior ()->args ());
+      /* We call get_inferior_args() because we might need to compute
+	 the value now.  */
+      uiout->field_string ("infargs", get_inferior_args ());
       uiout->text ("\n");
       uiout->flush ();
     }
 
+  /* We call get_inferior_args() because we might need to compute
+     the value now.  */
   run_target->create_inferior (exec_file,
-			       current_inferior ()->args (),
+			       std::string (get_inferior_args ()),
 			       current_inferior ()->environment.envp (),
 			       from_tty);
   /* to_create_inferior should push the target, so after this point we
@@ -481,10 +534,9 @@ run_command_1 (const char *args, int from_tty, enum run_how run_how)
   if (run_how == RUN_STOP_AT_FIRST_INSN)
     {
       thread_info *thr = inferior_thread ();
-      target_waitstatus ws;
-      ws.kind = TARGET_WAITKIND_STOPPED;
-      ws.value.sig = GDB_SIGNAL_0;
-      thr->set_pending_waitstatus (ws);
+      thr->suspend.waitstatus_pending_p = 1;
+      thr->suspend.waitstatus.kind = TARGET_WAITKIND_STOPPED;
+      thr->suspend.waitstatus.value.sig = GDB_SIGNAL_0;
     }
 
   /* Start the target running.  Do not use -1 continuation as it would skip
@@ -1171,15 +1223,15 @@ signal_command (const char *signum_exp, int from_tty)
 	  if (tp == current)
 	    continue;
 
-	  if (tp->stop_signal () != GDB_SIGNAL_0
-	      && signal_pass_state (tp->stop_signal ()))
+	  if (tp->suspend.stop_signal != GDB_SIGNAL_0
+	      && signal_pass_state (tp->suspend.stop_signal))
 	    {
 	      if (!must_confirm)
 		printf_unfiltered (_("Note:\n"));
 	      printf_unfiltered (_("  Thread %s previously stopped with signal %s, %s.\n"),
 				 print_thread_id (tp),
-				 gdb_signal_to_name (tp->stop_signal ()),
-				 gdb_signal_to_string (tp->stop_signal ()));
+				 gdb_signal_to_name (tp->suspend.stop_signal),
+				 gdb_signal_to_string (tp->suspend.stop_signal));
 	      must_confirm = 1;
 	    }
 	}
@@ -1242,7 +1294,7 @@ queue_signal_command (const char *signum_exp, int from_tty)
     error (_("Signal handling set to not pass this signal to the program."));
 
   tp = inferior_thread ();
-  tp->set_stop_signal (oursig);
+  tp->suspend.stop_signal = oursig;
 }
 
 /* Data for the FSM that manages the until (with no argument)
@@ -1862,7 +1914,7 @@ info_program_command (const char *args, int from_tty)
 
   target_files_info ();
   printf_filtered (_("Program stopped at %s.\n"),
-		   paddress (target_gdbarch (), tp->stop_pc ()));
+		   paddress (target_gdbarch (), tp->suspend.stop_pc));
   if (tp->control.stop_step)
     printf_filtered (_("It stopped after being stepped.\n"));
   else if (stat != 0)
@@ -1881,11 +1933,11 @@ info_program_command (const char *args, int from_tty)
 	  stat = bpstat_num (&bs, &num);
 	}
     }
-  else if (tp->stop_signal () != GDB_SIGNAL_0)
+  else if (tp->suspend.stop_signal != GDB_SIGNAL_0)
     {
       printf_filtered (_("It stopped with signal %s, %s.\n"),
-		       gdb_signal_to_name (tp->stop_signal ()),
-		       gdb_signal_to_string (tp->stop_signal ()));
+		       gdb_signal_to_name (tp->suspend.stop_signal),
+		       gdb_signal_to_string (tp->suspend.stop_signal));
     }
 
   if (from_tty)
@@ -2021,6 +2073,7 @@ path_info (const char *args, int from_tty)
 static void
 path_command (const char *dirname, int from_tty)
 {
+  char *exec_path;
   const char *env;
 
   dont_repeat ();
@@ -2028,9 +2081,10 @@ path_command (const char *dirname, int from_tty)
   /* Can be null if path is not set.  */
   if (!env)
     env = "";
-  std::string exec_path = env;
-  mod_path (dirname, exec_path);
-  current_inferior ()->environment.set (path_var_name, exec_path.c_str ());
+  exec_path = xstrdup (env);
+  mod_path (dirname, &exec_path);
+  current_inferior ()->environment.set (path_var_name, exec_path);
+  xfree (exec_path);
   if (from_tty)
     path_info (NULL, from_tty);
 }
@@ -2369,9 +2423,9 @@ proceed_after_attach (inferior *inf)
   scoped_restore_current_thread restore_thread;
 
   for (thread_info *thread : inf->non_exited_threads ())
-    if (!thread->executing ()
+    if (!thread->executing
 	&& !thread->stop_requested
-	&& thread->stop_signal () == GDB_SIGNAL_0)
+	&& thread->suspend.stop_signal == GDB_SIGNAL_0)
       {
 	switch_to_thread (thread);
 	clear_proceed_status (0);
@@ -2446,7 +2500,7 @@ attach_post_wait (int from_tty, enum attach_post_wait_mode mode)
 	proceed_after_attach (inferior);
       else
 	{
-	  if (inferior_thread ()->stop_signal () == GDB_SIGNAL_0)
+	  if (inferior_thread ()->suspend.stop_signal == GDB_SIGNAL_0)
 	    {
 	      clear_proceed_status (0);
 	      proceed ((CORE_ADDR) -1, GDB_SIGNAL_DEFAULT);
@@ -2642,7 +2696,7 @@ notice_new_inferior (thread_info *thr, bool leave_running, int from_tty)
   /* When we "notice" a new inferior we need to do all the things we
      would normally do if we had just attached to it.  */
 
-  if (thr->executing ())
+  if (thr->executing)
     {
       struct inferior *inferior = current_inferior ();
 

@@ -157,9 +157,7 @@ static struct avr_opcodes_s *avr_gccisr_opcode;
 
 const char comment_chars[] = ";";
 const char line_comment_chars[] = "#";
-
-const char *avr_line_separator_chars = "$";
-static const char *avr_line_separator_chars_no_dollar = "";
+const char line_separator_chars[] = "$";
 
 const char *md_shortopts = "m:";
 struct mcu_type_s
@@ -567,8 +565,7 @@ enum options
   OPTION_ISA_RMW,
   OPTION_LINK_RELAX,
   OPTION_NO_LINK_RELAX,
-  OPTION_HAVE_GCCISR,
-  OPTION_NO_DOLLAR_LINE_SEPARATOR,
+  OPTION_HAVE_GCCISR
 };
 
 struct option md_longopts[] =
@@ -581,7 +578,6 @@ struct option md_longopts[] =
   { "mlink-relax",  no_argument, NULL, OPTION_LINK_RELAX  },
   { "mno-link-relax",  no_argument, NULL, OPTION_NO_LINK_RELAX  },
   { "mgcc-isr",     no_argument, NULL, OPTION_HAVE_GCCISR },
-  { "mno-dollar-line-separator", no_argument, NULL, OPTION_NO_DOLLAR_LINE_SEPARATOR },
   { NULL, no_argument, NULL, 0 }
 };
 
@@ -691,8 +687,6 @@ md_show_usage (FILE *stream)
 	"  -mlink-relax     generate relocations for linker relaxation (default)\n"
 	"  -mno-link-relax  don't generate relocations for linker relaxation.\n"
 	"  -mgcc-isr        accept the __gcc_isr pseudo-instruction.\n"
-	"  -mno-dollar-line-separator\n"
-        "                   do not treat the $ character as a line separator.\n"
         ));
   show_mcu_list (stream);
 }
@@ -761,10 +755,6 @@ md_parse_option (int c, const char *arg)
       return 1;
     case OPTION_HAVE_GCCISR:
       avr_opt.have_gccisr = 1;
-      return 1;
-    case OPTION_NO_DOLLAR_LINE_SEPARATOR:
-      avr_line_separator_chars = avr_line_separator_chars_no_dollar;
-      lex_type['$'] = LEX_NAME | LEX_BEGIN_NAME;
       return 1;
     }
 
@@ -1558,7 +1548,7 @@ md_apply_fix (fixS *fixP, valueT * valP, segT seg)
              fixP->fx_r_type = BFD_RELOC_AVR_DIFF32;
              break;
            default:
-             as_bad_subtract (fixP);
+             as_bad_where (fixP->fx_file, fixP->fx_line, _("expression too complex"));
              break;
          }
 
@@ -1570,7 +1560,7 @@ md_apply_fix (fixS *fixP, valueT * valP, segT seg)
   }
   /* We don't actually support subtracting a symbol.  */
   if (fixP->fx_subsy != (symbolS *) NULL)
-    as_bad_subtract (fixP);
+    as_bad_where (fixP->fx_file, fixP->fx_line, _("expression too complex"));
 
   /* For the DIFF relocs, write the value into the object file while still
      keeping fx_done FALSE, as both the difference (recorded in the object file)
@@ -1834,7 +1824,7 @@ tc_gen_reloc (asection *seg ATTRIBUTE_UNUSED,
 
   if (fixp->fx_subsy != NULL)
     {
-      as_bad_subtract (fixp);
+      as_bad_where (fixp->fx_file, fixp->fx_line, _("expression too complex"));
       return NULL;
     }
 

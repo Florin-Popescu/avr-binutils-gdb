@@ -51,6 +51,7 @@ proc strace_remove_socket { action } {
     clean_restart $executable
     gdb_load_shlib $libipa
     if ![runto_main] {
+	fail "can't run to main"
 	return -1
     }
 
@@ -135,6 +136,7 @@ proc strace_info_marker { } {
 	clean_restart $executable
 	gdb_load_shlib $libipa
 	if ![runto_main] {
+	    fail "can't run to main"
 	    return -1
 	}
 
@@ -171,6 +173,7 @@ proc strace_probe_marker { } {
 	clean_restart $executable
 	gdb_load_shlib $libipa
 	if ![runto_main] {
+	    fail "can't run to main"
 	    return -1
 	}
 
@@ -210,6 +213,7 @@ proc strace_trace_on_same_addr { type } {
 	clean_restart $executable
 	gdb_load_shlib $libipa
 	if ![runto_main] {
+	    fail "can't run to main"
 	    return -1
 	}
 
@@ -313,6 +317,7 @@ proc strace_trace_on_diff_addr { } {
 	clean_restart $executable
 	gdb_load_shlib $libipa
 	if ![runto_main] {
+	    fail "can't run to main"
 	    return -1
 	}
 
@@ -372,6 +377,7 @@ if { [istarget "x86_64-*-linux*"] || [istarget "i\[34567\]86-*-linux*"] } {
 clean_restart $executable
 gdb_load_shlib $libipa
 if ![runto_main] {
+    fail "can't run to main to check for trace support"
     return -1
 }
 if { ![gdb_target_supports_trace] } then {

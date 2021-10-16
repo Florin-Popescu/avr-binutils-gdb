@@ -51,7 +51,7 @@ d_main_name (void)
 
 /* Implements the la_demangle language_defn routine for language D.  */
 
-gdb::unique_xmalloc_ptr<char>
+char *
 d_demangle (const char *symbol, int options)
 {
   return gdb_demangle (symbol, options | DMGL_DLANG);
@@ -126,9 +126,8 @@ public:
   }
 
   /* See language.h.  */
-  bool sniff_from_mangled_name
-       (const char *mangled,
-	gdb::unique_xmalloc_ptr<char> *demangled) const override
+  bool sniff_from_mangled_name (const char *mangled,
+				char **demangled) const override
   {
     *demangled = d_demangle (mangled, 0);
     return *demangled != NULL;
@@ -136,8 +135,7 @@ public:
 
   /* See language.h.  */
 
-  gdb::unique_xmalloc_ptr<char> demangle_symbol (const char *mangled,
-						 int options) const override
+  char *demangle_symbol (const char *mangled, int options) const override
   {
     return d_demangle (mangled, options);
   }

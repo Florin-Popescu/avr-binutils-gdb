@@ -43,8 +43,6 @@ int main () {
     void *thread_result;
     long i;
 
-    alarm (180);
-
     pthread_barrier_init (&threads_started_barrier, NULL, NUM + 1);
 
     pthread_barrier_init (&threads_started_barrier2, NULL, 2);
@@ -63,10 +61,7 @@ int main () {
 
     pthread_join (threads[0], NULL);
 
-    /* first child thread exited */
-
-    while (1)
-      sleep (1);
+    sleep (180);  /* first child thread exited */
 
     exit (EXIT_SUCCESS);
 }

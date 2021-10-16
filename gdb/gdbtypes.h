@@ -654,16 +654,6 @@ struct field
     this->m_type = type;
   }
 
-  const char *name () const
-  {
-    return m_name;
-  }
-
-  void set_name (const char *name)
-  {
-    m_name = name;
-  }
-
   union field_location loc;
 
   /* * For a function or member type, this is 1 if the argument is
@@ -695,7 +685,7 @@ struct field
      NULL for range bounds, array domains, and member function
      arguments.  */
 
-  const char *m_name;
+  const char *name;
 };
 
 struct range_bounds
@@ -1039,8 +1029,6 @@ struct type
 
   ULONGEST bit_stride () const
   {
-    if (this->code () == TYPE_CODE_ARRAY && this->field (0).bitsize != 0)
-      return this->field (0).bitsize;
     return this->bounds ()->bit_stride ();
   }
 
@@ -1363,12 +1351,6 @@ struct type
   {
     gdb_assert (main_type->type_specific_field == TYPE_SPECIFIC_INT);
     return main_type->type_specific.int_stuff.bit_offset;
-  }
-
-  /* Return true if this is a pointer or reference type.  */
-  bool is_pointer_or_reference () const
-  {
-    return this->code () == TYPE_CODE_PTR || TYPE_IS_REFERENCE (this);
   }
 
   /* * Type that is a pointer to this type.
@@ -1793,69 +1775,37 @@ struct call_site_parameter
 
 struct call_site
   {
-    call_site (CORE_ADDR pc, dwarf2_per_cu_data *per_cu,
-	       dwarf2_per_objfile *per_objfile)
-      : per_cu (per_cu), per_objfile (per_objfile), m_unrelocated_pc (pc)
-    {}
+    /* * Address of the first instruction after this call.  It must be
+       the first field as we overload core_addr_hash and core_addr_eq
+       for it.  */
 
-    static int
-    eq (const call_site *a, const call_site *b)
-    {
-      return core_addr_eq (&a->m_unrelocated_pc, &b->m_unrelocated_pc);
-    }
-
-    static hashval_t
-    hash (const call_site *a)
-    {
-      return core_addr_hash (&a->m_unrelocated_pc);
-    }
-
-    static int
-    eq (const void *a, const void *b)
-    {
-      return eq ((const call_site *)a, (const call_site *)b);
-    }
-
-    static hashval_t
-    hash (const void *a)
-    {
-      return hash ((const call_site *)a);
-    }
-
-    /* Return the address of the first instruction after this call.  */
-
-    CORE_ADDR pc () const;
+    CORE_ADDR pc;
 
     /* * List successor with head in FUNC_TYPE.TAIL_CALL_LIST.  */
 
-    struct call_site *tail_call_next = nullptr;
+    struct call_site *tail_call_next;
 
     /* * Describe DW_AT_call_target.  Missing attribute uses
        FIELD_LOC_KIND_DWARF_BLOCK with FIELD_DWARF_BLOCK == NULL.  */
 
-    struct call_site_target target {};
+    struct call_site_target target;
 
     /* * Size of the PARAMETER array.  */
 
-    unsigned parameter_count = 0;
+    unsigned parameter_count;
 
     /* * CU of the function where the call is located.  It gets used
        for DWARF blocks execution in the parameter array below.  */
 
-    dwarf2_per_cu_data *const per_cu = nullptr;
+    dwarf2_per_cu_data *per_cu;
 
     /* objfile of the function where the call is located.  */
 
-    dwarf2_per_objfile *const per_objfile = nullptr;
+    dwarf2_per_objfile *per_objfile;
 
-  private:
-    /* Unrelocated address of the first instruction after this call.  */
-    const CORE_ADDR m_unrelocated_pc;
-
-  public:
     /* * Describe DW_TAG_call_site's DW_TAG_formal_parameter.  */
 
-    struct call_site_parameter parameter[];
+    struct call_site_parameter parameter[1];
   };
 
 /* The type-specific info for TYPE_CODE_FIXED_POINT types.  */
@@ -2006,7 +1956,7 @@ extern void set_type_vptr_basetype (struct type *, struct type *);
 #define TYPE_TAIL_CALL_LIST(thistype) TYPE_MAIN_TYPE(thistype)->type_specific.func_stuff->tail_call_list
 #define TYPE_BASECLASS(thistype,index) ((thistype)->field (index).type ())
 #define TYPE_N_BASECLASSES(thistype) TYPE_CPLUS_SPECIFIC(thistype)->n_baseclasses
-#define TYPE_BASECLASS_NAME(thistype,index) (thistype->field (index).name ())
+#define TYPE_BASECLASS_NAME(thistype,index) TYPE_FIELD_NAME(thistype, index)
 #define TYPE_BASECLASS_BITPOS(thistype,index) TYPE_FIELD_BITPOS(thistype,index)
 #define BASETYPE_VIA_PUBLIC(thistype, index) \
   ((!TYPE_FIELD_PRIVATE(thistype, index)) && (!TYPE_FIELD_PROTECTED(thistype, index)))
@@ -2016,6 +1966,7 @@ extern void set_type_vptr_basetype (struct type *, struct type *);
   (TYPE_CPLUS_SPECIFIC(thistype)->virtual_field_bits == NULL ? 0 \
     : B_TST(TYPE_CPLUS_SPECIFIC(thistype)->virtual_field_bits, (index)))
 
+#define FIELD_NAME(thisfld) ((thisfld).name)
 #define FIELD_LOC_KIND(thisfld) ((thisfld).loc_kind)
 #define FIELD_BITPOS_LVAL(thisfld) ((thisfld).loc.bitpos)
 #define FIELD_BITPOS(thisfld) (FIELD_BITPOS_LVAL (thisfld) + 0)
@@ -2042,6 +1993,7 @@ extern void set_type_vptr_basetype (struct type *, struct type *);
 #define FIELD_ARTIFICIAL(thisfld) ((thisfld).artificial)
 #define FIELD_BITSIZE(thisfld) ((thisfld).bitsize)
 
+#define TYPE_FIELD_NAME(thistype, n) FIELD_NAME((thistype)->field (n))
 #define TYPE_FIELD_LOC_KIND(thistype, n) FIELD_LOC_KIND ((thistype)->field (n))
 #define TYPE_FIELD_BITPOS(thistype, n) FIELD_BITPOS ((thistype)->field (n))
 #define TYPE_FIELD_ENUMVAL(thistype, n) FIELD_ENUMVAL ((thistype)->field (n))
@@ -2565,11 +2517,9 @@ extern struct type *lookup_unsigned_typename (const struct language_defn *,
 extern struct type *lookup_signed_typename (const struct language_defn *,
 					    const char *);
 
-extern ULONGEST get_unsigned_type_max (struct type *);
+extern void get_unsigned_type_max (struct type *, ULONGEST *);
 
 extern void get_signed_type_minmax (struct type *, LONGEST *, LONGEST *);
-
-extern CORE_ADDR get_pointer_type_max (struct type *);
 
 /* * Resolve all dynamic values of a type e.g. array bounds to static values.
    ADDR specifies the location of the variable the type is bound to.

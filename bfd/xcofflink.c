@@ -35,6 +35,11 @@
 #undef  STRING_SIZE_SIZE
 #define STRING_SIZE_SIZE 4
 
+/* We reuse the SEC_ROM flag as a mark flag for garbage collection.
+   This flag will only be used on input sections.  */
+
+#define SEC_MARK (SEC_ROM)
+
 /* The list of import files.  */
 
 struct xcoff_import_file
@@ -2875,7 +2880,7 @@ xcoff_mark_symbol (struct bfd_link_info *info, struct xcoff_link_hash_entry *h)
 
       hsec = h->root.u.def.section;
       if (! bfd_is_abs_section (hsec)
-	  && hsec->gc_mark == 0)
+	  && (hsec->flags & SEC_MARK) == 0)
 	{
 	  if (! xcoff_mark (info, hsec))
 	    return false;
@@ -2883,7 +2888,7 @@ xcoff_mark_symbol (struct bfd_link_info *info, struct xcoff_link_hash_entry *h)
     }
 
   if (h->toc_section != NULL
-      && h->toc_section->gc_mark == 0)
+      && (h->toc_section->flags & SEC_MARK) == 0)
     {
       if (! xcoff_mark (info, h->toc_section))
 	return false;
@@ -2926,21 +2931,17 @@ static bool
 xcoff_mark (struct bfd_link_info *info, asection *sec)
 {
   if (bfd_is_const_section (sec)
-      || sec->gc_mark != 0)
+      || (sec->flags & SEC_MARK) != 0)
     return true;
 
-  sec->gc_mark = 1;
+  sec->flags |= SEC_MARK;
 
-  if (sec->owner->xvec != info->output_bfd->xvec)
-    return true;
-
-  if (coff_section_data (sec->owner, sec) == NULL)
-    return true;
-
-
-  if (xcoff_section_data (sec->owner, sec) != NULL)
+  if (sec->owner->xvec == info->output_bfd->xvec
+      && coff_section_data (sec->owner, sec) != NULL
+      && xcoff_section_data (sec->owner, sec) != NULL)
     {
       struct xcoff_link_hash_entry **syms;
+      struct internal_reloc *rel, *relend;
       asection **csects;
       unsigned long i, first, last;
 
@@ -2957,66 +2958,63 @@ xcoff_mark (struct bfd_link_info *info, asection *sec)
 	    if (!xcoff_mark_symbol (info, syms[i]))
 	      return false;
 	  }
-    }
 
-  /* Look through the section relocs.  */
-  if ((sec->flags & SEC_RELOC) != 0
-      && sec->reloc_count > 0)
-    {
-      struct internal_reloc *rel, *relend;
-
-      rel = xcoff_read_internal_relocs (sec->owner, sec, true,
-					NULL, false, NULL);
-      if (rel == NULL)
-	return false;
-      relend = rel + sec->reloc_count;
-      for (; rel < relend; rel++)
+      /* Look through the section relocs.  */
+      if ((sec->flags & SEC_RELOC) != 0
+	  && sec->reloc_count > 0)
 	{
-	  struct xcoff_link_hash_entry *h;
-
-	  if ((unsigned int) rel->r_symndx
-	      > obj_raw_syment_count (sec->owner))
-	    continue;
-
-	  h = obj_xcoff_sym_hashes (sec->owner)[rel->r_symndx];
-	  if (h != NULL)
+	  rel = xcoff_read_internal_relocs (sec->owner, sec, true,
+					    NULL, false, NULL);
+	  if (rel == NULL)
+	    return false;
+	  relend = rel + sec->reloc_count;
+	  for (; rel < relend; rel++)
 	    {
-	      if ((h->flags & XCOFF_MARK) == 0)
-		{
-		  if (!xcoff_mark_symbol (info, h))
-		    return false;
-		}
-	    }
-	  else
-	    {
-	      asection *rsec;
+	      struct xcoff_link_hash_entry *h;
 
-	      rsec = xcoff_data (sec->owner)->csects[rel->r_symndx];
-	      if (rsec != NULL
-		  && rsec->gc_mark == 0)
-		{
-		  if (!xcoff_mark (info, rsec))
-		    return false;
-		}
-	    }
+	      if ((unsigned int) rel->r_symndx
+		  > obj_raw_syment_count (sec->owner))
+		continue;
 
-	  /* See if this reloc needs to be copied into the .loader
-	     section.  */
-	  if ((sec->flags & SEC_DEBUGGING) == 0
-	      && xcoff_need_ldrel_p (info, rel, h, sec))
-	    {
-	      ++xcoff_hash_table (info)->ldrel_count;
+	      h = obj_xcoff_sym_hashes (sec->owner)[rel->r_symndx];
 	      if (h != NULL)
-		h->flags |= XCOFF_LDREL;
-	    }
-	}
+		{
+		  if ((h->flags & XCOFF_MARK) == 0)
+		    {
+		      if (!xcoff_mark_symbol (info, h))
+			return false;
+		    }
+		}
+	      else
+		{
+		  asection *rsec;
 
-      if (! info->keep_memory
-	  && coff_section_data (sec->owner, sec) != NULL
-	  && ! coff_section_data (sec->owner, sec)->keep_relocs)
-	{
-	  free (coff_section_data (sec->owner, sec)->relocs);
-	  coff_section_data (sec->owner, sec)->relocs = NULL;
+		  rsec = xcoff_data (sec->owner)->csects[rel->r_symndx];
+		  if (rsec != NULL
+		      && (rsec->flags & SEC_MARK) == 0)
+		    {
+		      if (!xcoff_mark (info, rsec))
+			return false;
+		    }
+		}
+
+	      /* See if this reloc needs to be copied into the .loader
+		 section.  */
+	      if (xcoff_need_ldrel_p (info, rel, h, sec))
+		{
+		  ++xcoff_hash_table (info)->ldrel_count;
+		  if (h != NULL)
+		    h->flags |= XCOFF_LDREL;
+		}
+	    }
+
+	  if (! info->keep_memory
+	      && coff_section_data (sec->owner, sec) != NULL
+	      && ! coff_section_data (sec->owner, sec)->keep_relocs)
+	    {
+	      free (coff_section_data (sec->owner, sec)->relocs);
+	      coff_section_data (sec->owner, sec)->relocs = NULL;
+	    }
 	}
     }
 
@@ -3037,52 +3035,27 @@ xcoff_sweep (struct bfd_link_info *info)
   for (sub = info->input_bfds; sub != NULL; sub = sub->link.next)
     {
       asection *o;
-      bool some_kept = false;
 
-      /* As says below keep all sections from non-XCOFF
-         input files.  */
-      if (sub->xvec != info->output_bfd->xvec)
-	some_kept = true;
-      else
-	{
-	  /* See whether any section is already marked.  */
-	  for (o = sub->sections; o != NULL; o = o->next)
-	    if (o->gc_mark)
-	      some_kept = true;
-	}
-
-      /* If no section in this file will be kept, then we can
-	 toss out debug sections.  */
-      if (!some_kept)
-	{
-	  for (o = sub->sections; o != NULL; o = o->next)
-	    {
-	      o->size = 0;
-	      o->reloc_count = 0;
-	    }
-	  continue;
-	}
-
-      /* Keep all sections from non-XCOFF input files.  Keep
-	 special sections.  Keep .debug sections for the
-	 moment.  */
       for (o = sub->sections; o != NULL; o = o->next)
 	{
-	  if (o->gc_mark == 1)
-	    continue;
-
-	  if (sub->xvec != info->output_bfd->xvec
-	      || o == xcoff_hash_table (info)->debug_section
-	      || o == xcoff_hash_table (info)->loader_section
-	      || o == xcoff_hash_table (info)->linkage_section
-	      || o == xcoff_hash_table (info)->descriptor_section
-	      || (bfd_section_flags (o) & SEC_DEBUGGING)
-	      || strcmp (o->name, ".debug") == 0)
-	    xcoff_mark (info, o);
-	  else
+	  if ((o->flags & SEC_MARK) == 0)
 	    {
-	      o->size = 0;
-	      o->reloc_count = 0;
+	      /* Keep all sections from non-XCOFF input files.  Keep
+		 special sections.  Keep .debug sections for the
+		 moment.  */
+	      if (sub->xvec != info->output_bfd->xvec
+		  || o == xcoff_hash_table (info)->debug_section
+		  || o == xcoff_hash_table (info)->loader_section
+		  || o == xcoff_hash_table (info)->linkage_section
+		  || o == xcoff_hash_table (info)->descriptor_section
+		  || (bfd_section_flags (o) & SEC_DEBUGGING)
+		  || strcmp (o->name, ".debug") == 0)
+		o->flags |= SEC_MARK;
+	      else
+		{
+		  o->size = 0;
+		  o->reloc_count = 0;
+		}
 	    }
 	}
     }
@@ -3484,7 +3457,7 @@ xcoff_keep_symbol_p (struct bfd_link_info *info, bfd *input_bfd,
   if (xcoff_hash_table (info)->gc
       && !bfd_is_abs_section (csect)
       && !bfd_is_und_section (csect)
-      && csect->gc_mark == 0)
+      && (csect->flags & SEC_MARK) == 0)
     return 0;
 
   /* An XCOFF linker always removes C_STAT symbols.  */
@@ -3796,7 +3769,7 @@ bfd_xcoff_size_dynamic_sections (bfd *output_bfd,
 		 (a) one of the input files did or (b) we end up
 		 creating TOC references as part of the link process.  */
 	      if (o != xcoff_hash_table (info)->toc_section
-		  && o->gc_mark == 0)
+		  && (o->flags & SEC_MARK) == 0)
 		{
 		  if (! xcoff_mark (info, o))
 		    goto error_return;
@@ -3833,7 +3806,7 @@ bfd_xcoff_size_dynamic_sections (bfd *output_bfd,
 
       if (sec != NULL
 	  && gc
-	  && sec->gc_mark == 0)
+	  && (sec->flags & SEC_MARK) == 0)
 	sec = NULL;
 
       special_sections[i] = sec;
@@ -4019,8 +3992,7 @@ bfd_xcoff_size_dynamic_sections (bfd *output_bfd,
 	}
     }
 
-  if (info->strip != strip_all
-      && xcoff_hash_table (info)->debug_section != NULL)
+  if (info->strip != strip_all)
     xcoff_hash_table (info)->debug_section->size =
       _bfd_stringtab_size (debug_strtab);
 
@@ -5130,7 +5102,7 @@ xcoff_find_tc0 (bfd *output_bfd, struct xcoff_final_link_info *flinfo)
        input_bfd != NULL;
        input_bfd = input_bfd->link.next)
     for (sec = input_bfd->sections; sec != NULL; sec = sec->next)
-      if (sec->gc_mark != 0 && xcoff_toc_section_p (sec))
+      if ((sec->flags & SEC_MARK) != 0 && xcoff_toc_section_p (sec))
 	{
 	  start = sec->output_section->vma + sec->output_offset;
 	  if (toc_start > start)
@@ -5162,7 +5134,7 @@ xcoff_find_tc0 (bfd *output_bfd, struct xcoff_final_link_info *flinfo)
 	   input_bfd != NULL;
 	   input_bfd = input_bfd->link.next)
 	for (sec = input_bfd->sections; sec != NULL; sec = sec->next)
-	  if (sec->gc_mark != 0 && xcoff_toc_section_p (sec))
+	  if ((sec->flags & SEC_MARK) != 0 && xcoff_toc_section_p (sec))
 	    {
 	      start = sec->output_section->vma + sec->output_offset;
 	      if (start < best_address

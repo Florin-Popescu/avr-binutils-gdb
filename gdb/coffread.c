@@ -2008,8 +2008,7 @@ coff_read_struct_type (int index, int length, int lastsym,
 	  list = newobj;
 
 	  /* Save the data.  */
-	  list->field.set_name (obstack_strdup (&objfile->objfile_obstack,
-						name));
+	  list->field.name = obstack_strdup (&objfile->objfile_obstack, name);
 	  list->field.set_type (decode_type (ms, ms->c_type, &sub_aux,
 					     objfile));
 	  SET_FIELD_BITPOS (list->field, 8 * ms->c_value);
@@ -2025,8 +2024,7 @@ coff_read_struct_type (int index, int length, int lastsym,
 	  list = newobj;
 
 	  /* Save the data.  */
-	  list->field.set_name (obstack_strdup (&objfile->objfile_obstack,
-						name));
+	  list->field.name = obstack_strdup (&objfile->objfile_obstack, name);
 	  list->field.set_type (decode_type (ms, ms->c_type, &sub_aux,
 					     objfile));
 	  SET_FIELD_BITPOS (list->field, ms->c_value);
@@ -2144,7 +2142,7 @@ coff_read_enum_type (int index, int length, int lastsym,
 	  struct symbol *xsym = syms->symbol[j];
 
 	  SYMBOL_TYPE (xsym) = type;
-	  type->field (n).set_name (xsym->linkage_name ());
+	  TYPE_FIELD_NAME (type, n) = xsym->linkage_name ();
 	  SET_FIELD_ENUMVAL (type->field (n), SYMBOL_VALUE (xsym));
 	  if (SYMBOL_VALUE (xsym) < 0)
 	    unsigned_enum = 0;

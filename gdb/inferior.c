@@ -41,7 +41,7 @@
 
 DEFINE_REGISTRY (inferior, REGISTRY_ACCESS_FIELD)
 
-intrusive_list<inferior> inferior_list;
+struct inferior *inferior_list = NULL;
 static int highest_inferior_num;
 
 /* See inferior.h.  */
@@ -89,37 +89,19 @@ inferior::inferior (int pid_)
   m_target_stack.push (get_dummy_target ());
 }
 
-/* See inferior.h.  */
-
-int
-inferior::unpush_target (struct target_ops *t)
-{
-  /* If unpushing the process stratum target from the inferior while threads
-     exist in the inferior, ensure that we don't leave any threads of the
-     inferior in the target's "resumed with pending wait status" list.
-
-     See also the comment in set_thread_exited.  */
-  if (t->stratum () == process_stratum)
-    {
-      process_stratum_target *proc_target = as_process_stratum_target (t);
-
-      for (thread_info *thread : this->non_exited_threads ())
-	proc_target->maybe_remove_resumed_with_pending_wait_status (thread);
-    }
-
-  return m_target_stack.unpush (t);
-}
-
 void
-inferior::set_tty (std::string terminal_name)
+inferior::set_tty (const char *terminal_name)
 {
-  m_terminal = std::move (terminal_name);
+  if (terminal_name != nullptr && *terminal_name != '\0')
+    m_terminal = make_unique_xstrdup (terminal_name);
+  else
+    m_terminal = NULL;
 }
 
-const std::string &
+const char *
 inferior::tty ()
 {
-  return m_terminal;
+  return m_terminal.get ();
 }
 
 void
@@ -144,7 +126,16 @@ add_inferior_silent (int pid)
 {
   inferior *inf = new inferior (pid);
 
-  inferior_list.push_back (*inf);
+  if (inferior_list == NULL)
+    inferior_list = inf;
+  else
+    {
+      inferior *last;
+
+      for (last = inferior_list; last->next != NULL; last = last->next)
+	;
+      last->next = inf;
+    }
 
   gdb::observers::inferior_added.notify (inf);
 
@@ -172,27 +163,27 @@ add_inferior (int pid)
   return inf;
 }
 
-/* See inferior.h.  */
-
 void
-inferior::clear_thread_list (bool silent)
+delete_inferior (struct inferior *todel)
 {
-  thread_list.clear_and_dispose ([=] (thread_info *thr)
-    {
-      set_thread_exited (thr, silent);
-      if (thr->deletable ())
-	delete thr;
-    });
-  ptid_thread_map.clear ();
-}
+  struct inferior *inf, *infprev;
 
-void
-delete_inferior (struct inferior *inf)
-{
-  inf->clear_thread_list (true);
+  infprev = NULL;
 
-  auto it = inferior_list.iterator_to (*inf);
-  inferior_list.erase (it);
+  for (inf = inferior_list; inf; infprev = inf, inf = inf->next)
+    if (inf == todel)
+      break;
+
+  if (!inf)
+    return;
+
+  for (thread_info *tp : inf->threads_safe ())
+    delete_thread_silent (tp);
+
+  if (infprev)
+    infprev->next = inf->next;
+  else
+    inferior_list = inf->next;
 
   gdb::observers::inferior_removed.notify (inf);
 
@@ -207,9 +198,24 @@ delete_inferior (struct inferior *inf)
    exit of its threads.  */
 
 static void
-exit_inferior_1 (struct inferior *inf, int silent)
+exit_inferior_1 (struct inferior *inftoex, int silent)
 {
-  inf->clear_thread_list (silent);
+  struct inferior *inf;
+
+  for (inf = inferior_list; inf; inf = inf->next)
+    if (inf == inftoex)
+      break;
+
+  if (!inf)
+    return;
+
+  for (thread_info *tp : inf->threads_safe ())
+    {
+      if (silent)
+	delete_thread_silent (tp);
+      else
+	delete_thread (tp);
+    }
 
   gdb::observers::inferior_exit.notify (inf);
 
@@ -376,14 +382,22 @@ have_live_inferiors (void)
 void
 prune_inferiors (void)
 {
-  for (inferior *inf : all_inferiors_safe ())
-    {
-      if (!inf->deletable ()
-	  || !inf->removable
-	  || inf->pid != 0)
-	continue;
+  inferior *ss;
 
-      delete_inferior (inf);
+  ss = inferior_list;
+  while (ss)
+    {
+      if (!ss->deletable ()
+	  || !ss->removable
+	  || ss->pid != 0)
+	{
+	  ss = ss->next;
+	  continue;
+	}
+
+      inferior *ss_next = ss->next;
+      delete_inferior (ss);
+      ss = ss_next;
     }
 }
 

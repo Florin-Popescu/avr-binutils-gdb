@@ -13,6 +13,7 @@ main (int argc, char *argv[])
   ctf_snapshot_id_t snap;
   unsigned char *foo;
   size_t foo_size;
+  const char *bar;
   int err;
   char name[64];
 

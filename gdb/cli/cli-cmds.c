@@ -168,10 +168,6 @@ struct cmd_list_element *setchecklist;
 
 struct cmd_list_element *showchecklist;
 
-struct cmd_list_element *setsourcelist;
-
-struct cmd_list_element *showsourcelist;
-
 /* Command tracing state.  */
 
 int source_verbose = 0;
@@ -236,7 +232,7 @@ with_command_1 (const char *set_cmd_prefix,
 					  /*ignore_help_classes=*/ 1);
   gdb_assert (set_cmd != nullptr);
 
-  if (!set_cmd->var.has_value ())
+  if (set_cmd->var == nullptr)
     error (_("Cannot use this setting with the \"with\" command"));
 
   std::string temp_value
@@ -245,8 +241,7 @@ with_command_1 (const char *set_cmd_prefix,
   if (nested_cmd == nullptr)
     nested_cmd = skip_spaces (delim + 2);
 
-  gdb_assert (set_cmd->var.has_value ());
-  std::string org_value = get_setshow_command_value_string (*set_cmd->var);
+  std::string org_value = get_setshow_command_value_string (set_cmd);
 
   /* Tweak the setting to the new temporary value.  */
   do_set_command (temp_value.c_str (), from_tty, set_cmd);
@@ -448,7 +443,7 @@ complete_command (const char *arg, int from_tty)
 int
 is_complete_command (struct cmd_list_element *c)
 {
-  return cmd_simple_func_eq (c, complete_command);
+  return cmd_cfunc_eq (c, complete_command);
 }
 
 static void
@@ -650,7 +645,7 @@ find_and_open_script (const char *script_file, int search_path)
   /* Search for and open 'file' on the search path used for source
      files.  Put the full location in *FULL_PATHP.  */
   gdb::unique_xmalloc_ptr<char> full_path;
-  fd = openp (source_path.c_str (), search_flags,
+  fd = openp (source_path, search_flags,
 	      file.get (), O_RDONLY, &full_path);
 
   if (fd == -1)
@@ -1042,7 +1037,12 @@ edit_command (const char *arg, int from_tty)
 struct pipe_cmd_opts
 {
   /* For "-d".  */
-  std::string delimiter;
+  char *delimiter = nullptr;
+
+  ~pipe_cmd_opts ()
+  {
+    xfree (delimiter);
+  }
 };
 
 static const gdb::option::option_def pipe_cmd_option_defs[] = {
@@ -1079,8 +1079,8 @@ pipe_command (const char *arg, int from_tty)
     (&arg, gdb::option::PROCESS_OPTIONS_UNKNOWN_IS_OPERAND, grp);
 
   const char *delim = "|";
-  if (!opts.delimiter.empty ())
-    delim = opts.delimiter.c_str ();
+  if (opts.delimiter != nullptr)
+    delim = opts.delimiter;
 
   const char *command = arg;
   if (command == nullptr)
@@ -1143,8 +1143,8 @@ pipe_command_completer (struct cmd_list_element *ignore,
     return;
 
   const char *delimiter = "|";
-  if (!opts.delimiter.empty ())
-    delimiter = opts.delimiter.c_str ();
+  if (opts.delimiter != nullptr)
+    delimiter = opts.delimiter;
 
   /* Check if we're past option values already.  */
   if (text > org_text && !isspace (text[-1]))
@@ -2088,31 +2088,31 @@ setting_cmd (const char *fnname, struct cmd_list_element *showlist,
 /* Builds a value from the show CMD.  */
 
 static struct value *
-value_from_setting (const setting &var, struct gdbarch *gdbarch)
+value_from_setting (const cmd_list_element *cmd, struct gdbarch *gdbarch)
 {
-  switch (var.type ())
+  switch (cmd->var_type)
     {
     case var_integer:
-      if (var.get<int> () == INT_MAX)
+      if (*(int *) cmd->var == INT_MAX)
 	return value_from_longest (builtin_type (gdbarch)->builtin_int,
 				   0);
       else
 	return value_from_longest (builtin_type (gdbarch)->builtin_int,
-				   var.get<int> ());
+				   *(int *) cmd->var);
     case var_zinteger:
       return value_from_longest (builtin_type (gdbarch)->builtin_int,
-				 var.get<int> ());
+				 *(int *) cmd->var);
     case var_boolean:
       return value_from_longest (builtin_type (gdbarch)->builtin_int,
-				 var.get<bool> () ? 1 : 0);
+				 *(bool *) cmd->var ? 1 : 0);
     case var_zuinteger_unlimited:
       return value_from_longest (builtin_type (gdbarch)->builtin_int,
-				 var.get<int> ());
+				 *(int *) cmd->var);
     case var_auto_boolean:
       {
 	int val;
 
-	switch (var.get<enum auto_boolean> ())
+	switch (*(enum auto_boolean*) cmd->var)
 	  {
 	  case AUTO_BOOLEAN_TRUE:
 	    val = 1;
@@ -2130,43 +2130,27 @@ value_from_setting (const setting &var, struct gdbarch *gdbarch)
 				   val);
       }
     case var_uinteger:
-      if (var.get<unsigned int> () == UINT_MAX)
+      if (*(unsigned int *) cmd->var == UINT_MAX)
 	return value_from_ulongest
 	  (builtin_type (gdbarch)->builtin_unsigned_int, 0);
       else
 	return value_from_ulongest
 	  (builtin_type (gdbarch)->builtin_unsigned_int,
-	   var.get<unsigned int> ());
+	   *(unsigned int *) cmd->var);
     case var_zuinteger:
       return value_from_ulongest (builtin_type (gdbarch)->builtin_unsigned_int,
-				  var.get<unsigned int> ());
+				  *(unsigned int *) cmd->var);
     case var_string:
     case var_string_noescape:
     case var_optional_filename:
     case var_filename:
     case var_enum:
-      {
-	const char *value;
-	size_t len;
-	if (var.type () == var_enum)
-	  {
-	    value = var.get<const char *> ();
-	    len = strlen (value);
-	  }
-	else
-	  {
-	    const std::string &st = var.get<std::string> ();
-	    value = st.c_str ();
-	    len = st.length ();
-	  }
-
-	if (len > 0)
-	  return value_cstring (value, len,
-				builtin_type (gdbarch)->builtin_char);
-	else
-	  return value_cstring ("", 1,
-				builtin_type (gdbarch)->builtin_char);
-      }
+      if (*(char **) cmd->var)
+	return value_cstring (*(char **) cmd->var, strlen (*(char **) cmd->var),
+			      builtin_type (gdbarch)->builtin_char);
+      else
+	return value_cstring ("", 1,
+			      builtin_type (gdbarch)->builtin_char);
     default:
       gdb_assert_not_reached ("bad var_type");
     }
@@ -2179,12 +2163,9 @@ gdb_setting_internal_fn (struct gdbarch *gdbarch,
 			 const struct language_defn *language,
 			 void *cookie, int argc, struct value **argv)
 {
-  cmd_list_element *show_cmd
-    = setting_cmd ("$_gdb_setting", showlist, argc, argv);
-
-  gdb_assert (show_cmd->var.has_value ());
-
-  return value_from_setting (*show_cmd->var, gdbarch);
+  return value_from_setting (setting_cmd ("$_gdb_setting", showlist,
+					  argc, argv),
+			     gdbarch);
 }
 
 /* Implementation of the convenience function $_gdb_maint_setting.  */
@@ -2194,20 +2175,18 @@ gdb_maint_setting_internal_fn (struct gdbarch *gdbarch,
 			       const struct language_defn *language,
 			       void *cookie, int argc, struct value **argv)
 {
-  cmd_list_element *show_cmd
-    = setting_cmd ("$_gdb_maint_setting", maintenance_show_cmdlist, argc, argv);
-
-  gdb_assert (show_cmd->var.has_value ());
-
-  return value_from_setting (*show_cmd->var, gdbarch);
+  return value_from_setting (setting_cmd ("$_gdb_maint_setting",
+					  maintenance_show_cmdlist,
+					  argc, argv),
+			     gdbarch);
 }
 
 /* Builds a string value from the show CMD.  */
 
 static struct value *
-str_value_from_setting (const setting &var, struct gdbarch *gdbarch)
+str_value_from_setting (const cmd_list_element *cmd, struct gdbarch *gdbarch)
 {
-  switch (var.type ())
+  switch (cmd->var_type)
     {
     case var_integer:
     case var_zinteger:
@@ -2217,7 +2196,7 @@ str_value_from_setting (const setting &var, struct gdbarch *gdbarch)
     case var_uinteger:
     case var_zuinteger:
       {
-	std::string cmd_val = get_setshow_command_value_string (var);
+	std::string cmd_val = get_setshow_command_value_string (cmd);
 
 	return value_cstring (cmd_val.c_str (), cmd_val.size (),
 			      builtin_type (gdbarch)->builtin_char);
@@ -2230,30 +2209,15 @@ str_value_from_setting (const setting &var, struct gdbarch *gdbarch)
     case var_enum:
       /* For these cases, we do not use get_setshow_command_value_string,
 	 as this function handle some characters specially, e.g. by
-	 escaping quotevar.  So, we directly use the var string value,
-	 similarly to the value_from_setting code for these casevar.  */
-      {
-	const char *value;
-	size_t len;
-	if (var.type () == var_enum)
-	  {
-	    value = var.get<const char *> ();
-	    len = strlen (value);
-	  }
-	else
-	  {
-	    const std::string &st = var.get<std::string> ();
-	    value = st.c_str ();
-	    len = st.length ();
-	  }
+	 escaping quotes.  So, we directly use the cmd->var string value,
+	 similarly to the value_from_setting code for these cases.  */
+      if (*(char **) cmd->var)
+	return value_cstring (*(char **) cmd->var, strlen (*(char **) cmd->var),
+			      builtin_type (gdbarch)->builtin_char);
+      else
+	return value_cstring ("", 1,
+			      builtin_type (gdbarch)->builtin_char);
 
-	if (len > 0)
-	  return value_cstring (value, len,
-				builtin_type (gdbarch)->builtin_char);
-	else
-	  return value_cstring ("", 1,
-				builtin_type (gdbarch)->builtin_char);
-      }
     default:
       gdb_assert_not_reached ("bad var_type");
     }
@@ -2266,12 +2230,9 @@ gdb_setting_str_internal_fn (struct gdbarch *gdbarch,
 			     const struct language_defn *language,
 			     void *cookie, int argc, struct value **argv)
 {
-  cmd_list_element *show_cmd
-    = setting_cmd ("$_gdb_setting_str", showlist, argc, argv);
-
-  gdb_assert (show_cmd->var.has_value ());
-
-  return str_value_from_setting (*show_cmd->var, gdbarch);
+  return str_value_from_setting (setting_cmd ("$_gdb_setting_str",
+					      showlist, argc, argv),
+				 gdbarch);
 }
 
 
@@ -2282,13 +2243,10 @@ gdb_maint_setting_str_internal_fn (struct gdbarch *gdbarch,
 				   const struct language_defn *language,
 				   void *cookie, int argc, struct value **argv)
 {
-  cmd_list_element *show_cmd
-    = setting_cmd ("$_gdb_maint_setting_str", maintenance_show_cmdlist, argc,
-		   argv);
-
-  gdb_assert (show_cmd->var.has_value ());
-
-  return str_value_from_setting (*show_cmd->var, gdbarch);
+  return str_value_from_setting (setting_cmd ("$_gdb_maint_setting_str",
+					      maintenance_show_cmdlist,
+					      argc, argv),
+				 gdbarch);
 }
 
 void _initialize_cli_cmds ();

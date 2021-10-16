@@ -38,7 +38,7 @@ static struct serial *scb_base;
 /* Non-NULL gives filename which contains a recording of the remote session,
    suitable for playback by gdbserver.  */
 
-static std::string serial_logfile;
+static char *serial_logfile = NULL;
 static struct ui_file *serial_logfp = NULL;
 
 static const struct serial_ops *serial_interface_lookup (const char *);
@@ -251,12 +251,12 @@ serial_open_ops_1 (const struct serial_ops *ops, const char *open_name)
   scb->next = scb_base;
   scb_base = scb;
 
-  if (!serial_logfile.empty ())
+  if (serial_logfile != NULL)
     {
       stdio_file_up file (new stdio_file ());
 
-      if (!file->open (serial_logfile.c_str (), "w"))
-	perror_with_name (serial_logfile.c_str ());
+      if (!file->open (serial_logfile, "w"))
+	perror_with_name (serial_logfile);
 
       serial_logfp = file.release ();
     }

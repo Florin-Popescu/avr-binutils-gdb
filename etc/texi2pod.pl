@@ -59,8 +59,6 @@ while ($_ = shift) {
 	    $flag = shift;
 	}
         push (@ipath, $flag);
-    } elsif (/^--no-split$/) {
-	# ignore option for makeinfo compatibility
     } elsif (/^-/) {
 	usage();
     } else {

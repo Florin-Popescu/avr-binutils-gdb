@@ -1,21 +1,3 @@
-2021-09-27  Nick Alcock  <nick.alcock@oracle.com>
-
-	* configure: Regenerate.
-
-2021-09-15  Andrew Burgess  <andrew.burgess@embecosm.com>
-
-	* archures.c (bfd_arch_list): Use 'char *' instead of 'char **'
-	when calculating space for a string list.
-
-2021-09-014  Cupertino Miranda  <cmiranda@synopsys.com>
-           Claudiu Zissulescu  <claziss@synopsys.com>
-
-	* arc-got.h (arc_static_sym_data): New structure.
-	(get_static_sym_data): New function.
-	(relocate_fix_got_relocs_for_got_info): Move the computation fo
-	symbol value and section to above introduced function, and use
-	this new function.
-
 2021-09-07  Luis Machado  <luis.machado@linaro.org>
 
 	Revert: [AArch64] MTE corefile support
@@ -25,87 +7,9 @@
 	* elf.c (elfcore_make_memtag_note_section): New function.
 	(elfcore_grok_note): Handle NT_MEMTAG note types.
 
-2021-09-07  Nick Clifton  <nickc@redhat.com>
+2021-07-03  Joel Brobecker  <brobecker@adacore.com>
 
-	PR 28305
-	* elf32-xtensa.c (elf_xtensa_do_reloc): Add check for put of range
-	reloc.
-
-	PR 28303
-	* elfxx-riscv.c (riscv_elf_add_sub_reloc): Add check for out of
-	range relocs.
-
-2021-08-10  Nick Clifton  <nickc@redhat.com>
-
-	* po/sr.po: Updated Serbian translation.
-
-2021-07-18  Nick Clifton  <nickc@redhat.com>
-
-	* config.bfd: Move pending obsoletion targets to obsolete list.
-
-2021-07-16  Giulio Benetti  <giulio.benetti@benettiengineering.com>
-
-	* elf32-or1k.c (or1k_elf_relocate_section): Use a separate entry
-	in switch case R_OR1K_INSN_REL_26 where we need to check for
-	!SYMBOL_CALLS_LOCAL() instead of !SYMBOL_REFERENCES_LOCAL().
-
-2021-07-14  Clément Chigot  <clement.chigot@atos.net>
-
-	* libxcoff.h (struct xcoff_dwsect_name): Add DWARF name.
-	* coff-rs6000.c (xcoff_dwsect_names): Update.
-	* coffcode.h (sec_to_styp_flags): Likewise.
-	(coff_new_section_hook): Likewise.
-
-2021-07-10  Alan Modra  <amodra@gmail.com>
-
-	* dwarf2.c (read_address): Remove accidental commit.
-	(read_ranges): Compare offset rather than pointers.
-
-2021-07-08  Nick Clifton  <nickc@redhat.com>
-
-	* po/pt.po: Updated Portuguese translation.
-
-2021-07-07  Nick Clifton  <nickc@redhat.com>
-
-	* elfcode.h (elf_swap_symbol_out): Revert accidental change that
-	removed an abort if the shndx pointer is NULL.
-
-2021-07-07  Rainer Orth  <ro@CeBiTec.Uni-Bielefeld.DE>
-
-	* sysdep.h [!ENABLE_NLS]: Prevent inclusion of <libintl.h> on
-	Solaris.
-
-2021-07-07  Rainer Orth  <ro@CeBiTec.Uni-Bielefeld.DE>
-
-	* configure.ac: Check for strnlen declaration.
-	* configure, config.in: Regenerate.
-
-2021-07-07  Nick Clifton  <nickc@redhat.com>
-
-	PR 28051
-	* coff-rs6000.c (xcoff_reloc_type_tls): Reformat error messages in
-	order to fix problems when translating.
-	* cofflink.c (_bfd_coff_write_global_sym): Likewise.
-	* elfnn-aarch64.c (_bfd_aarch64_erratum_843419_branch_to_stub):
-	Likewise.
-	* po/bfd.pot: Regenerate.
-
-2021-07-06  Michael Matz  <matz@suse.de>
-
-	PR ld/28021
-	* elfnn-riscv.c (riscv_relax_delete_bytes): Check for any
-	versioning.
-
-2021-07-06  Alan Modra  <amodra@gmail.com>
-
-	PR 28055
-	* elf64-bpf.c (bpf_elf_generic_reloc): Add missing ATTRIBUTE_UNUSED.
-
-2021-07-05  Alan Modra  <amodra@gmail.com>
-
-	PR 28055
-	* elf64-bpf.c (bpf_elf_generic_reloc): Use correct bfd for bfd_put
-	and bfd_put_32 calls.  Correct section limit checks.
+	* development.sh (development): Set to false.
 
 2021-07-03  Nick Clifton  <nickc@redhat.com>
 

@@ -159,7 +159,7 @@ struct trace_status
 
 struct trace_status *current_trace_status (void);
 
-extern std::string default_collect;
+extern char *default_collect;
 
 extern int trace_regblock_size;
 

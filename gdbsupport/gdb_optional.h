@@ -200,20 +200,8 @@ private:
   }
 
   /* The get operations have m_instantiated as a precondition.  */
-  T &get () noexcept
-  {
-#if defined(_GLIBCXX_DEBUG)
-    gdb_assert (this->has_value ());
-#endif
-    return m_item;
-  }
-  constexpr const T &get () const noexcept
-  {
-#if defined(_GLIBCXX_DEBUG)
-    gdb_assert (this->has_value ());
-#endif
-    return m_item;
-  }
+  T &get () noexcept { return m_item; }
+  constexpr const T &get () const noexcept { return m_item; }
 
   /* The object.  */
   union

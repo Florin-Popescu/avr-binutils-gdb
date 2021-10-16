@@ -89,6 +89,7 @@ proc one_jit_test {solib_binfiles_target match_str} {
 	}
 
 	if { ![runto_main] } {
+	    fail "can't run to main"
 	    return
 	}
 

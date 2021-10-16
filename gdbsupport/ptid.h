@@ -33,8 +33,6 @@
 */
 
 #include <functional>
-#include <string>
-#include "gdbsupport/common-types.h"
 
 class ptid_t
 {
@@ -48,7 +46,7 @@ public:
      A ptid with only a PID (LWP and TID equal to zero) is usually used to
      represent a whole process, including all its lwps/threads.  */
 
-  explicit constexpr ptid_t (int pid, long lwp = 0, ULONGEST tid = 0)
+  explicit constexpr ptid_t (int pid, long lwp = 0, long tid = 0)
     : m_pid (pid), m_lwp (lwp), m_tid (tid)
   {}
 
@@ -74,7 +72,7 @@ public:
 
   /* Fetch the tid (thread id) component from a ptid.  */
 
-  constexpr ULONGEST tid () const
+  constexpr long tid () const
   { return m_tid; }
 
   /* Return true if the ptid represents a whole process, including all its
@@ -126,12 +124,6 @@ public:
 	    || *this == filter);
   }
 
-  /* Return a string representation of the ptid.
-
-     This is only meant to be used in debug messages.  */
-
-  std::string to_string () const;
-
   /* Make a null ptid.  */
 
   static constexpr ptid_t make_null ()
@@ -150,7 +142,7 @@ private:
   long m_lwp;
 
   /* Thread id.  */
-  ULONGEST m_tid;
+  long m_tid;
 };
 
 /* Functor to hash a ptid.  */

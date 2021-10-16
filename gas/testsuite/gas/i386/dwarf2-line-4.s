@@ -7,7 +7,6 @@
 main:
         .cfi_startproc
         nop
-	.file 1 "dwarf2-test.c"
 	.loc 1 1
         ret
         .cfi_endproc

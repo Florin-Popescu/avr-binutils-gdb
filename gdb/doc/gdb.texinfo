@@ -8919,7 +8919,6 @@ prefer to use Emacs facilities to view source; see @ref{Emacs, ,Using
 * Search::                      Searching source files
 * Source Path::                 Specifying source directories
 * Machine Code::                Source and machine code
-* Disable Reading Source::	Disable Reading Source Code
 @end menu
 
 @node List
@@ -9927,31 +9926,6 @@ OFF, which means never display the disassembly of the next line or
 instruction.
 @end table
 
-@node Disable Reading Source
-@section Disable Reading Source Code
-@cindex source code, disable access
-
-In some cases it can be desirable to prevent @value{GDBN} from
-accessing source code files.  One case where this might be desirable
-is if the source code files are located over a slow network
-connection.
-
-The following command can be used to control whether @value{GDBN}
-should access source code files or not:
-
-@table @code
-@kindex set source open
-@kindex show source open
-@item set source open @r{[}on@r{|}off@r{]}
-@itemx show source open
-When this option is @code{on}, which is the default, @value{GDBN} will
-access source code files when needed, for example to print source
-lines when @value{GDBN} stops, or in response to the @code{list}
-command.
-
-When this option is @code{off}, @value{GDBN} will not access source
-code files.
-@end table
 
 @node Data
 @chapter Examining Data
@@ -11376,6 +11350,7 @@ that the number of elements to print is unlimited.
 
 @item show print elements
 Display the number of elements of a large array that @value{GDBN} will print.
+If the number is 0, then the printing is unlimited.
 
 @anchor{set print frame-arguments}
 @item set print frame-arguments @var{value}
@@ -38657,8 +38632,8 @@ directory (@file{gdb-@value{GDBVN}}, for version @value{GDBVN}).
 
 Here is a summary of the @file{configure} options and arguments that
 are most often useful for building @value{GDBN}.  @file{configure}
-also has several other options not listed here.  @xref{Running
-configure Scripts,,,autoconf}, for a full
+also has several other options not listed here.  @inforef{Running
+configure scripts,,autoconf.info}, for a full
 explanation of @file{configure}.
 
 @smallexample
@@ -38868,7 +38843,7 @@ different warning flags, depending on the exact version of the
 compiler you are using.
 
 @item --enable-werror
-Treat compiler warnings as errors.  It adds the @code{-Werror} flag
+Treat compiler warnings as werrors.  It adds the @code{-Werror} flag
 to the compiler, which will fail the compilation if the compiler
 outputs any warning messages.
 
@@ -39106,10 +39081,6 @@ buffer.
 Control whether @value{GDBN} will skip PAD packets when computing the
 packet history.
 
-@kindex maint info jit
-@item maint info jit
-Print information about JIT code objects loaded in the current inferior.
-
 @kindex set displaced-stepping
 @kindex show displaced-stepping
 @cindex displaced stepping support
@@ -39255,19 +39226,6 @@ that there is no @code{corefile} option for @code{demangler-warning}:
 demangler warnings always create a core file and this cannot be
 disabled.
 @end table
-
-@kindex maint set internal-error
-@kindex maint show internal-error
-@kindex maint set internal-warning
-@kindex maint show internal-warning
-@item maint set internal-error backtrace @r{[}on|off@r{]}
-@itemx maint show internal-error backtrace
-@itemx maint set internal-warning backtrace @r{[}on|off@r{]}
-@itemx maint show internal-warning backtrace
-When @value{GDBN} reports an internal problem (error or warning) it is
-possible to have a backtrace of @value{GDBN} printed to the standard
-error stream.  This is @samp{on} by default for @code{internal-error}
-and @samp{off} by default for @code{internal-warning}.
 
 @kindex maint packet
 @item maint packet @var{text}
@@ -39471,12 +39429,11 @@ data structures, including its flags and contained types.
 
 @kindex maint selftest
 @cindex self tests
-@item maint selftest @r{[}-verbose@r{]} @r{[}@var{filter}@r{]}
+@item maint selftest @r{[}@var{filter}@r{]}
 Run any self tests that were compiled in to @value{GDBN}.  This will
 print a message showing how many tests were run, and how many failed.
 If a @var{filter} is passed, only the tests with @var{filter} in their
-name will be ran.  If @code{-verbose} is passed, the self tests can be
-more verbose.
+name will by ran.
 
 @kindex maint info selftests
 @cindex self tests
@@ -39760,24 +39717,6 @@ support in the command options framework.
 These are representative commands for each @var{kind} of setting type
 @value{GDBN} supports.  They are used by the testsuite for exercising
 the settings infrastructure.
-
-@kindex maint set backtrace-on-fatal-signal
-@kindex maint show backtrace-on-fatal-signal
-@item maint set backtrace-on-fatal-signal [on|off]
-@itemx maint show backtrace-on-fatal-signal
-When this setting is @code{on}, if @value{GDBN} itself terminates with
-a fatal signal (e.g.@: SIGSEGV), then a limited backtrace will be
-printed to the standard error stream.  This backtrace can be used to
-help diagnose crashes within @value{GDBN} in situations where a user
-is unable to share a corefile with the @value{GDBN} developers.
-
-If the functionality to provide this backtrace is not available for
-the platform on which GDB is running then this feature will be
-@code{off} by default, and attempting to turn this feature on will
-give an error.
-
-For platforms that do support creating the backtrace this feature is
-@code{on} by default.
 
 @kindex maint with
 @item maint with @var{setting} [@var{value}] [-- @var{command}]
@@ -46011,17 +45950,11 @@ pointers; printing a code pointer converts it into a symbolic
 address.  The stack pointer and any dedicated address registers
 may be marked as data pointers.
 
-@item ieee_half
-Half precision IEEE floating point.
-
 @item ieee_single
 Single precision IEEE floating point.
 
 @item ieee_double
 Double precision IEEE floating point.
-
-@item bfloat16
-The 16-bit @dfn{brain floating point} format used e.g.@: by x86 and ARM.
 
 @item arm_fpa_ext
 The 12-byte extended precision format used by ARM FPA registers.

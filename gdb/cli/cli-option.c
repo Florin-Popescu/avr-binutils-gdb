@@ -45,7 +45,7 @@ union option_value
   const char *enumeration;
 
   /* For var_string options.  This is malloc-allocated.  */
-  std::string *string;
+  char *string;
 };
 
 /* Holds an options definition and its value.  */
@@ -87,7 +87,7 @@ struct option_def_and_value
     if (value.has_value ())
       {
 	if (option.type == var_string)
-	  delete value->string;
+	  xfree (value->string);
       }
   }
 
@@ -439,7 +439,7 @@ parse_option (gdb::array_view<const option_def_group> options_group,
 	  error (_("-%s requires an argument"), match->name);
 
 	option_value val;
-	val.string = new std::string (std::move (str));
+	val.string = xstrdup (str.c_str ());
 	return option_def_and_value {*match, match_ctx, val};
       }
 
@@ -603,7 +603,8 @@ save_option_value_in_ctx (gdb::optional<option_def_and_value> &ov)
       break;
     case var_string:
       *ov->option.var_address.string (ov->option, ov->ctx)
-	= std::move (*ov->value->string);
+	= ov->value->string;
+      ov->value->string = nullptr;
       break;
     default:
       gdb_assert_not_reached ("unhandled option type");

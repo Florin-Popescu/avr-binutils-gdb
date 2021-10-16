@@ -211,8 +211,6 @@ enum
   CpuTDX,
   /* Intel AVX VNNI Instructions support required.  */
   CpuAVX_VNNI,
-  /* Intel AVX-512 FP16 Instructions support required.  */
-  CpuAVX512_FP16,
   /* mwaitx instruction required */
   CpuMWAITX,
   /* Clzero instruction required */
@@ -390,7 +388,6 @@ typedef union i386_cpu_flags
       unsigned int cpuavx512_vp2intersect:1;
       unsigned int cputdx:1;
       unsigned int cpuavx_vnni:1;
-      unsigned int cpuavx512_fp16:1;
       unsigned int cpumwaitx:1;
       unsigned int cpuclzero:1;
       unsigned int cpuospke:1;
@@ -470,9 +467,6 @@ enum
   Size,
   /* check register size.  */
   CheckRegSize,
-  /* Instrucion requires that destination must be distinct from source
-     registers.  */
-  DistinctDest,
   /* instruction ignores operand size prefix and in Intel mode ignores
      mnemonic size suffix check.  */
 #define IGNORESIZE	1
@@ -584,8 +578,6 @@ enum
      1: 0F opcode prefix / space.
      2: 0F38 opcode prefix / space.
      3: 0F3A opcode prefix / space.
-     5: EVEXMAP5 opcode prefix / space.
-     6: EVEXMAP6 opcode prefix / space.
      8: XOP 08 opcode space.
      9: XOP 09 opcode space.
      A: XOP 0A opcode space.
@@ -594,8 +586,6 @@ enum
 #define SPACE_0F	1
 #define SPACE_0F38	2
 #define SPACE_0F3A	3
-#define SPACE_EVEXMAP5	5
-#define SPACE_EVEXMAP6	6
 #define SPACE_XOP08	8
 #define SPACE_XOP09	9
 #define SPACE_XOP0A	0xA
@@ -728,7 +718,6 @@ typedef struct i386_opcode_modifier
   unsigned int floatr:1;
   unsigned int size:2;
   unsigned int checkregsize:1;
-  unsigned int distinctdest:1;
   unsigned int mnemonicsize:2;
   unsigned int anysize:1;
   unsigned int no_bsuf:1;

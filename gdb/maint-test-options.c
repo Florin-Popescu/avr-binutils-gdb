@@ -133,11 +133,16 @@ struct test_options_opts
   const char *enum_opt = test_options_enum_values_xxx;
   unsigned int uint_opt = 0;
   int zuint_unl_opt = 0;
-  std::string string_opt;
+  char *string_opt = nullptr;
 
   test_options_opts () = default;
 
   DISABLE_COPY_AND_ASSIGN (test_options_opts);
+
+  ~test_options_opts ()
+  {
+    xfree (string_opt);
+  }
 
   /* Dump the options to FILE.  ARGS is the remainder unprocessed
      arguments.  */
@@ -157,7 +162,9 @@ struct test_options_opts
 			(zuint_unl_opt == -1
 			 ? "unlimited"
 			 : plongest (zuint_unl_opt)),
-			string_opt.c_str (),
+			(string_opt != nullptr
+			 ? string_opt
+			 : ""),
 			args);
   }
 };

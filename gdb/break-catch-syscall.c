@@ -486,12 +486,15 @@ catch_syscall_enabled (void)
   return inf_data->total_syscalls_count != 0;
 }
 
-/* Helper function for catching_syscall_number.  return true if B is a syscall
-   catchpoint for SYSCALL_NUMBER, else false.  */
+/* Helper function for catching_syscall_number.  If B is a syscall
+   catchpoint for SYSCALL_NUMBER, return 1 (which will make
+   'breakpoint_find_if' return).  Otherwise, return 0.  */
 
-static bool
-catching_syscall_number_1 (struct breakpoint *b, int syscall_number)
+static int
+catching_syscall_number_1 (struct breakpoint *b,
+			   void *data)
 {
+  int syscall_number = (int) (uintptr_t) data;
 
   if (is_syscall_catchpoint_enabled (b))
     {
@@ -501,23 +504,22 @@ catching_syscall_number_1 (struct breakpoint *b, int syscall_number)
 	{
 	  for (int iter : c->syscalls_to_be_caught)
 	    if (syscall_number == iter)
-	      return true;
+	      return 1;
 	}
       else
-	return true;
+	return 1;
     }
 
-  return false;
+  return 0;
 }
 
-bool
+int
 catching_syscall_number (int syscall_number)
 {
-  for (breakpoint *b : all_breakpoints ())
-    if (catching_syscall_number_1 (b, syscall_number))
-      return true;
+  struct breakpoint *b = breakpoint_find_if (catching_syscall_number_1,
+					 (void *) (uintptr_t) syscall_number);
 
-  return false;
+  return b != NULL;
 }
 
 /* Complete syscall names.  Used by "catch syscall".  */

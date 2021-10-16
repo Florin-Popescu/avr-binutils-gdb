@@ -1747,7 +1747,8 @@ uninstall-am: uninstall-pkgincludeHEADERS
 # An alternative is to slurp in the tables at runtime.
 .PHONY: nltvals
 nltvals:
-	$(srcdir)/common/gennltvals.py --cpp "$(CPP)"
+	$(abs_srcdir)/common/gennltvals.py --cpp "$(CPP)" --output nltvals.def --srcroot $(srcroot)
+	$(SHELL) $(srcroot)/move-if-change nltvals.def $(abs_srcdir)/common/nltvals.def
 
 common/version.c: common/version.c-stamp ; @true
 common/version.c-stamp: $(srcroot)/gdb/version.in $(srcroot)/bfd/version.h $(srcdir)/common/create-version.sh

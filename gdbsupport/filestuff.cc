@@ -306,13 +306,13 @@ socket_mark_cloexec (int fd)
 
 /* See filestuff.h.  */
 
-scoped_fd
+int
 gdb_open_cloexec (const char *filename, int flags, unsigned long mode)
 {
-  scoped_fd fd (open (filename, flags | O_CLOEXEC, mode));
+  int fd = open (filename, flags | O_CLOEXEC, mode);
 
-  if (fd.get () >= 0)
-    maybe_mark_cloexec (fd.get ());
+  if (fd >= 0)
+    maybe_mark_cloexec (fd);
 
   return fd;
 }

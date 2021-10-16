@@ -351,14 +351,7 @@ mips_adjust_reloc_in (bfd *abfd,
 		      arelent *rptr)
 {
   if (intern->r_type > MIPS_R_PCREL16)
-    {
-      /* xgettext:c-format */
-      _bfd_error_handler (_("%pB: unsupported relocation type %#x"),
-			  abfd, intern->r_type);
-      bfd_set_error (bfd_error_bad_value);
-      rptr->howto  = NULL;
-      return;
-    }
+    abort ();
 
   if (! intern->r_extern
       && (intern->r_type == MIPS_R_GPREL

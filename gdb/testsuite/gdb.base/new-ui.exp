@@ -82,6 +82,7 @@ proc_with_prefix do_test {} {
     clean_restart $testfile
 
     if ![runto_main] {
+	untested "could not run to main"
 	return -1
     }
 
@@ -185,7 +186,7 @@ proc_with_prefix do_test_invalid_args {} {
 
     # Test that we can continue working normally.
     if ![runto_main] {
-	return
+	fail "could not run to main"
     }
 }
 

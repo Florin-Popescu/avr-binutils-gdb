@@ -436,8 +436,8 @@ c_type_print_varspec_prefix (struct type *type,
 
     case TYPE_CODE_ARRAY:
       c_type_print_varspec_prefix (TYPE_TARGET_TYPE (type),
-				   stream, show, 0, need_post_space,
-				   language, flags, podata);
+				   stream, show, 0, 0, language, flags,
+				   podata);
       if (passed_a_ptr)
 	fprintf_filtered (stream, "(");
       break;
@@ -674,16 +674,16 @@ is_type_conversion_operator (struct type *type, int i, int j)
    form.  Even the author of this function feels that writing little
    parsers like this everywhere is stupid.  */
 
-static const char *
-remove_qualifiers (const char *qid)
+static char *
+remove_qualifiers (char *qid)
 {
   int quoted = 0;	/* Zero if we're not in quotes;
 			   '"' if we're in a double-quoted string;
 			   '\'' if we're in a single-quoted string.  */
   int depth = 0;	/* Number of unclosed parens we've seen.  */
   char *parenstack = (char *) alloca (strlen (qid));
-  const char *scan;
-  const char *last = 0;	/* The character after the rightmost
+  char *scan;
+  char *last = 0;	/* The character after the rightmost
 			   `::' token we've seen so far.  */
 
   for (scan = qid; *scan; scan++)
@@ -1206,7 +1206,7 @@ c_type_print_base_struct_union (struct type *type, struct ui_file *stream,
 	    }
 
 	  c_print_type_1 (type->field (i).type (),
-			  type->field (i).name (),
+			  TYPE_FIELD_NAME (type, i),
 			  stream, newshow, level + 4,
 			  language, &local_flags, &local_podata);
 
@@ -1257,6 +1257,7 @@ c_type_print_base_struct_union (struct type *type, struct ui_file *stream,
 	    {
 	      const char *mangled_name;
 	      gdb::unique_xmalloc_ptr<char> mangled_name_holder;
+	      char *demangled_name;
 	      const char *physname = TYPE_FN_FIELD_PHYSNAME (f, j);
 	      int is_full_physname_constructor =
 		TYPE_FN_FIELD_CONSTRUCTOR (f, j)
@@ -1310,9 +1311,9 @@ c_type_print_base_struct_union (struct type *type, struct ui_file *stream,
 	      else
 		mangled_name = TYPE_FN_FIELD_PHYSNAME (f, j);
 
-	      gdb::unique_xmalloc_ptr<char> demangled_name
-		= gdb_demangle (mangled_name,
-				DMGL_ANSI | DMGL_PARAMS);
+	      demangled_name =
+		gdb_demangle (mangled_name,
+			      DMGL_ANSI | DMGL_PARAMS);
 	      if (demangled_name == NULL)
 		{
 		  /* In some cases (for instance with the HP
@@ -1339,9 +1340,9 @@ c_type_print_base_struct_union (struct type *type, struct ui_file *stream,
 		}
 	      else
 		{
-		  const char *p;
-		  const char *demangled_no_class
-		    = remove_qualifiers (demangled_name.get ());
+		  char *p;
+		  char *demangled_no_class
+		    = remove_qualifiers (demangled_name);
 
 		  /* Get rid of the `static' appended by the
 		     demangler.  */
@@ -1349,12 +1350,19 @@ c_type_print_base_struct_union (struct type *type, struct ui_file *stream,
 		  if (p != NULL)
 		    {
 		      int length = p - demangled_no_class;
-		      std::string demangled_no_static (demangled_no_class,
-						       length);
-		      fputs_filtered (demangled_no_static.c_str (), stream);
+		      char *demangled_no_static;
+
+		      demangled_no_static
+			= (char *) xmalloc (length + 1);
+		      strncpy (demangled_no_static,
+			       demangled_no_class, length);
+		      *(demangled_no_static + length) = '\0';
+		      fputs_filtered (demangled_no_static, stream);
+		      xfree (demangled_no_static);
 		    }
 		  else
 		    fputs_filtered (demangled_no_class, stream);
+		  xfree (demangled_name);
 		}
 
 	      fprintf_filtered (stream, ";\n");
@@ -1594,7 +1602,7 @@ c_type_print_base_1 (struct type *type, struct ui_file *stream,
 	      if (i)
 		fprintf_filtered (stream, ", ");
 	      wrap_here ("    ");
-	      fputs_styled (type->field (i).name (),
+	      fputs_styled (TYPE_FIELD_NAME (type, i),
 			    variable_name_style.style (), stream);
 	      if (lastval != TYPE_FIELD_ENUMVAL (type, i))
 		{
@@ -1642,7 +1650,7 @@ c_type_print_base_1 (struct type *type, struct ui_file *stream,
 		/* We pass "show" here and not "show - 1" to get enum types
 		   printed.  There's no other way to see them.  */
 		c_print_type_1 (type->field (i).type (),
-				type->field (i).name (),
+				TYPE_FIELD_NAME (type, i),
 				stream, show, level + 4,
 				language, &local_flags, podata);
 		fprintf_filtered (stream, " @%s",

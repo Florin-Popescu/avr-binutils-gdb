@@ -244,10 +244,7 @@ struct xcoff_dwsect_name {
   unsigned int flag;
 
   /* Corresponding XCOFF section name.  */
-  const char *xcoff_name;
-
-  /* Corresponding DWARF section name.  */
-  const char *dwarf_name;
+  const char *name;
 
   /* True if size must be prepended.  */
   bool def_size;

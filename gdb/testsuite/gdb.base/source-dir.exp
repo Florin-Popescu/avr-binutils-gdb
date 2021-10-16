@@ -123,6 +123,7 @@ proc test_truncated_comp_dir {} {
 	"\r\nSource directories searched: \\\$cdir\[:;\]\\\$cwd"
 
     if ![runto_main] then {
+	fail "can't run to main"
 	return 0
     }
 

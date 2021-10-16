@@ -37,6 +37,7 @@ save_vars { env(TERM) } {
     }
 
     if {![runto_main]} {
+	fail "style tests failed"
 	return
     }
 

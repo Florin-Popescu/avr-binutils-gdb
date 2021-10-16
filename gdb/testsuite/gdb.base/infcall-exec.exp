@@ -35,6 +35,7 @@ if {[gdb_compile $srcdir/$subdir/$srcfile2 $binfile2 executable debug] != ""} {
 clean_restart $binfile
 
 if {![runto_main]} {
+    untested "could not run to main"
     return -1
 }
 

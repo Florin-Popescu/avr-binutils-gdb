@@ -538,9 +538,8 @@ std::string
 bsd_uthread_target::pid_to_str (ptid_t ptid)
 {
   if (ptid.tid () != 0)
-    return string_printf ("process %d, thread 0x%s",
-			  ptid.pid (),
-			  phex_nz (ptid.tid (), sizeof (ULONGEST)));
+    return string_printf ("process %d, thread 0x%lx",
+			  ptid.pid (), ptid.tid ());
 
   return normal_pid_to_str (ptid);
 }

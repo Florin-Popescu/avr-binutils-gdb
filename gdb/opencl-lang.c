@@ -254,7 +254,6 @@ static const struct lval_funcs opencl_value_funcs =
   {
     lval_func_read,
     lval_func_write,
-    nullptr,
     NULL,	/* indirect */
     NULL,	/* coerce_ref */
     lval_func_check_synthetic_pointer,
@@ -749,7 +748,7 @@ opencl_logical_binop_operation::evaluate (struct type *expect_type,
       /* For scalar built-in types, only evaluate the right
 	 hand operand if the left hand operand compares
 	 unequal(&&)/equal(||) to 0.  */
-      bool tmp = value_logical_not (arg1);
+      int tmp = value_logical_not (arg1);
 
       if (op == BINOP_LOGICAL_OR)
 	tmp = !tmp;

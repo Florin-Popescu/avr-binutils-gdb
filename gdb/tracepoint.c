@@ -130,7 +130,7 @@ static traceframe_info_up current_traceframe_info;
 static struct cmd_list_element *tfindlist;
 
 /* List of expressions to collect by default at each tracepoint hit.  */
-std::string default_collect;
+char *default_collect;
 
 static bool disconnected_tracing;
 
@@ -146,15 +146,15 @@ static int trace_buffer_size = -1;
 
 /* Textual notes applying to the current and/or future trace runs.  */
 
-static std::string trace_user;
+static char *trace_user = NULL;
 
 /* Textual notes applying to the current and/or future trace runs.  */
 
-static std::string trace_notes;
+static char *trace_notes = NULL;
 
 /* Textual notes applying to the stopping of a trace.  */
 
-static std::string trace_stop_notes;
+static char *trace_stop_notes = NULL;
 
 /* support routines */
 
@@ -655,7 +655,7 @@ validate_actionline (const char *line, struct breakpoint *b)
   if (c == 0)
     error (_("`%s' is not a tracepoint action, or is ambiguous."), p);
 
-  if (cmd_simple_func_eq (c, collect_pseudocommand))
+  if (cmd_cfunc_eq (c, collect_pseudocommand))
     {
       int trace_string = 0;
 
@@ -723,7 +723,7 @@ validate_actionline (const char *line, struct breakpoint *b)
       while (p && *p++ == ',');
     }
 
-  else if (cmd_simple_func_eq (c, teval_pseudocommand))
+  else if (cmd_cfunc_eq (c, teval_pseudocommand))
     {
       do
 	{			/* Repeat over a comma-separated list.  */
@@ -750,7 +750,7 @@ validate_actionline (const char *line, struct breakpoint *b)
       while (p && *p++ == ',');
     }
 
-  else if (cmd_simple_func_eq (c, while_stepping_pseudocommand))
+  else if (cmd_cfunc_eq (c, while_stepping_pseudocommand))
     {
       char *endp;
 
@@ -761,7 +761,7 @@ validate_actionline (const char *line, struct breakpoint *b)
       p = endp;
     }
 
-  else if (cmd_simple_func_eq (c, end_actions_pseudocommand))
+  else if (cmd_cfunc_eq (c, end_actions_pseudocommand))
     ;
 
   else
@@ -1308,7 +1308,7 @@ encode_actions_1 (struct command_line *action,
       if (cmd == 0)
 	error (_("Bad action list item: %s"), action_exp);
 
-      if (cmd_simple_func_eq (cmd, collect_pseudocommand))
+      if (cmd_cfunc_eq (cmd, collect_pseudocommand))
 	{
 	  int trace_string = 0;
 
@@ -1464,7 +1464,7 @@ encode_actions_1 (struct command_line *action,
 	    }
 	  while (action_exp && *action_exp++ == ',');
 	}			/* if */
-      else if (cmd_simple_func_eq (cmd, teval_pseudocommand))
+      else if (cmd_cfunc_eq (cmd, teval_pseudocommand))
 	{
 	  do
 	    {			/* Repeat over a comma-separated list.  */
@@ -1488,7 +1488,7 @@ encode_actions_1 (struct command_line *action,
 	    }
 	  while (action_exp && *action_exp++ == ',');
 	}			/* if */
-      else if (cmd_simple_func_eq (cmd, while_stepping_pseudocommand))
+      else if (cmd_cfunc_eq (cmd, while_stepping_pseudocommand))
 	{
 	  /* We check against nested while-stepping when setting
 	     breakpoint action, so no way to run into nested
@@ -1688,11 +1688,10 @@ start_tracing (const char *notes)
   target_set_trace_buffer_size (trace_buffer_size);
 
   if (!notes)
-    notes = trace_notes.c_str ();
+    notes = trace_notes;
+  ret = target_set_trace_notes (trace_user, notes, NULL);
 
-  ret = target_set_trace_notes (trace_user.c_str (), notes, NULL);
-
-  if (!ret && (!trace_user.empty () || notes))
+  if (!ret && (trace_user || notes))
     warning (_("Target does not support trace user/notes, info ignored"));
 
   /* Now insert traps and begin collecting data.  */
@@ -1765,8 +1764,7 @@ stop_tracing (const char *note)
     }
 
   if (!note)
-    note = trace_stop_notes.c_str ();
-
+    note = trace_stop_notes;
   ret = target_set_trace_notes (NULL, NULL, note);
 
   if (!ret && note)
@@ -2692,13 +2690,13 @@ trace_dump_actions (struct command_line *action,
       if (cmd == 0)
 	error (_("Bad action list item: %s"), action_exp);
 
-      if (cmd_simple_func_eq (cmd, while_stepping_pseudocommand))
+      if (cmd_cfunc_eq (cmd, while_stepping_pseudocommand))
 	{
 	  gdb_assert (action->body_list_1 == nullptr);
 	  trace_dump_actions (action->body_list_0.get (),
 			      1, stepping_frame, from_tty);
 	}
-      else if (cmd_simple_func_eq (cmd, collect_pseudocommand))
+      else if (cmd_cfunc_eq (cmd, collect_pseudocommand))
 	{
 	  /* Display the collected data.
 	     For the trap frame, display only what was collected at
@@ -2806,10 +2804,10 @@ all_tracepoint_actions (struct breakpoint *t)
      validation is per-tracepoint (local var "xyz" might be valid for
      one tracepoint and not another, etc), we make up the action on
      the fly, and don't cache it.  */
-  if (!default_collect.empty ())
+  if (*default_collect)
     {
       gdb::unique_xmalloc_ptr<char> default_collect_line
-	(xstrprintf ("collect %s", default_collect.c_str ()));
+	(xstrprintf ("collect %s", default_collect));
 
       validate_actionline (default_collect_line.get (), t);
       actions.reset (new struct command_line (simple_control,
@@ -2898,7 +2896,7 @@ set_trace_user (const char *args, int from_tty,
 {
   int ret;
 
-  ret = target_set_trace_notes (trace_user.c_str (), NULL, NULL);
+  ret = target_set_trace_notes (trace_user, NULL, NULL);
 
   if (!ret)
     warning (_("Target does not support trace notes, user ignored"));
@@ -2910,7 +2908,7 @@ set_trace_notes (const char *args, int from_tty,
 {
   int ret;
 
-  ret = target_set_trace_notes (NULL, trace_notes.c_str (), NULL);
+  ret = target_set_trace_notes (NULL, trace_notes, NULL);
 
   if (!ret)
     warning (_("Target does not support trace notes, note ignored"));
@@ -2922,7 +2920,7 @@ set_trace_stop_notes (const char *args, int from_tty,
 {
   int ret;
 
-  ret = target_set_trace_notes (NULL, NULL, trace_stop_notes.c_str ());
+  ret = target_set_trace_notes (NULL, NULL, trace_stop_notes);
 
   if (!ret)
     warning (_("Target does not support trace notes, stop note ignored"));
@@ -4139,6 +4137,7 @@ Tracepoint actions may include collecting of specified data,\n\
 single-stepping, or enabling/disabling other tracepoints,\n\
 depending on target's capabilities."));
 
+  default_collect = xstrdup ("");
   add_setshow_string_cmd ("default-collect", class_trace,
 			  &default_collect, _("\
 Set the list of expressions to collect by default."), _("\

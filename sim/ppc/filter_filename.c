@@ -17,6 +17,10 @@
  
     */
 
+/* This must come before any other includes.  */
+#include "defs.h"
+
+#include "ppc-config.h"
 #include "filter_filename.h"
 
 /* Shorten traces by eliminating the directory component to filenames.  */

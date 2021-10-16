@@ -45,8 +45,9 @@ ACX_LARGEFILE
 
 changequote(,)dnl
 case "${target}" in
-    hppa*64*-*-*) ;;
-    *-*-*aout*| i[3-7]86-*-msdos* | ns32k-*-* | pdp11-*-*)
+    hppa*64*-*-* | vax-*-netbsdelf*) ;;
+    *-*-*aout* | i[3-7]86-*-bsd* | i[3-7]86-*-msdos* | ns32k-*-* | \
+    pdp11-*-* | vax-*-*bsd*)
 changequote([,])dnl
 	if test "$plugins" = "yes"; then
 	    if test "${enable_plugins+set}" = set; then
@@ -259,7 +260,7 @@ AC_CHECK_HEADERS(fcntl.h sys/file.h sys/resource.h sys/stat.h sys/types.h \
 AC_CHECK_FUNCS(fcntl fdopen fileno fls getgid getpagesize getrlimit getuid \
 	       sysconf)
 
-AC_CHECK_DECLS([basename, ffs, stpcpy, asprintf, vasprintf, strnlen])
+AC_CHECK_DECLS([basename, ffs, stpcpy, asprintf, vasprintf])
 
 BFD_BINARY_FOPEN
 

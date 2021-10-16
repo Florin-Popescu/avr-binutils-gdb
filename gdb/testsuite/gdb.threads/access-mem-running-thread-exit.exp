@@ -35,7 +35,7 @@
 
 standard_testfile
 
-if {[build_executable "failed to prepare" $testfile $srcfile {debug pthreads}] == -1} {
+if {[prepare_for_testing "failed to prepare" $testfile $srcfile {debug pthreads}] == -1} {
     return -1
 }
 
@@ -53,6 +53,7 @@ proc test { non_stop } {
     }
 
     if ![runto_main] {
+	fail "cannot run to main"
 	return -1
     }
 
@@ -83,6 +84,7 @@ proc test { non_stop } {
 	gdb_load $binfile
 
 	if ![runto_main] {
+	    fail "cannot run to main"
 	    return -1
 	}
     }

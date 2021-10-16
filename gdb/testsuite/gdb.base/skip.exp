@@ -50,6 +50,7 @@ gdb_test "skip -x" "Invalid skip option: -x"
 gdb_test "skip -rfu foo.* xyzzy" "Invalid argument: xyzzy"
 
 if ![runto_main] {
+    fail "can't run to main"
     return
 }
 
@@ -94,6 +95,7 @@ gdb_test "info skip" \
 # right over it and go to the second line of main().
 
 if ![runto_main] {
+    fail "can't run to main"
     return
 }
 
@@ -114,6 +116,7 @@ with_test_prefix "step after deleting 1" {
 	"info skip (delete 1)"
 
     if ![runto_main] {
+	fail "can't run to main"
 	return
     }
 
@@ -133,6 +136,7 @@ with_test_prefix "step after disabling 3" {
 	"info skip shows entry as disabled"
 
     if ![runto_main] {
+	fail "can't run to main"
 	return
     }
 
@@ -156,6 +160,7 @@ with_test_prefix "step after enable 3" {
 	"info skip shows entry as enabled"
 
     if ![runto_main] {
+	fail "can't run to main"
 	return
     }
 
@@ -225,6 +230,7 @@ gdb_test "skip -rfu ^b.z$" "Function\\(s\\) \\^b\\.z\\$ will be skipped when ste
 
 with_test_prefix "step using -fi" {
     if ![runto_main] {
+	fail "can't run to main"
 	return
     }
 
@@ -237,6 +243,7 @@ with_test_prefix "step using -fi" {
 
 with_test_prefix "step using -gfi" {
     if ![runto_main] {
+	fail "can't run to main"
 	return
     }
 
@@ -249,6 +256,7 @@ with_test_prefix "step using -gfi" {
 
 with_test_prefix "step using -fu for baz" {
     if ![runto_main] {
+	fail "can't run to main"
 	return
     }
 
@@ -266,6 +274,7 @@ with_test_prefix "step using -fu for baz" {
 
 with_test_prefix "step using -rfu for baz" {
     if ![runto_main] {
+	fail "can't run to main"
 	return
     }
 
@@ -286,7 +295,8 @@ with_test_prefix "step using -rfu for baz" {
 with_test_prefix "step using -fi + -fu" {
     gdb_test_no_output "skip delete"
 
-    if ![runto test_skip_file_and_function] {
+    if ![runto test_skip_file_and_function no-message] {
+	fail "can't run to test_skip_file_and_function"
 	return
     }
 
@@ -304,6 +314,7 @@ with_test_prefix "skip delete completion" {
     global binfile
     clean_restart "${binfile}"
     if ![runto_main] {
+	fail "can't run to main"
 	return
     }
 

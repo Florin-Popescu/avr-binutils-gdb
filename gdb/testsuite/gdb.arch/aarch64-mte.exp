@@ -54,6 +54,7 @@ if { [prepare_for_testing "failed to prepare" ${testfile} ${srcfile}] } {
 }
 
 if ![runto_main] {
+    untested "could not run to main"
     return -1
 }
 
@@ -338,6 +339,7 @@ gdb_test "continue" \
 # Restart to execute the async tag fault test.
 with_test_prefix "async" {
     if ![runto_main] {
+	untested "could not run to main"
 	return -1
     }
 

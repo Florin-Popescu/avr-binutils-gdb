@@ -538,6 +538,7 @@ struct elf_sym_strtab
 {
   Elf_Internal_Sym sym;
   unsigned long dest_index;
+  unsigned long destshndx_index;
 };
 
 struct bfd_link_needed_list
@@ -620,6 +621,10 @@ struct elf_link_hash_table
   /* The string table of dynamic symbols, which becomes the .dynstr
      section.  */
   struct elf_strtab_hash *dynstr;
+
+  /* The number of symbol strings found in the link which must be put
+     into the .strtab section.  */
+  bfd_size_type strtabcount;
 
   /* The array size of the symbol string table, which becomes the
      .strtab section.  */
@@ -1814,7 +1819,7 @@ struct bfd_elf_section_data
 #define LEAST_KNOWN_OBJ_ATTRIBUTE 2
 
 /* The maximum number of known object attributes for any target.  */
-#define NUM_KNOWN_OBJ_ATTRIBUTES 77
+#define NUM_KNOWN_OBJ_ATTRIBUTES 71
 
 /* The value of an object attribute.  The type indicates whether the attribute
    holds and integer, a string, or both.  It can also indicate that there can
@@ -2068,10 +2073,6 @@ struct elf_obj_tdata
      property.  */
   unsigned int has_no_copy_on_protected : 1;
 
-  /* Whether if the bfd contains the
-     GNU_PROPERTY_1_NEEDED_INDIRECT_EXTERN_ACCESS property.  */
-  unsigned int has_indirect_extern_access : 1;
-
   /* Irix 5 often screws up the symbol table, sorting local symbols
      after global symbols.  This flag is set if the symbol table in
      this BFD appears to be screwed up.  If it is, we ignore the
@@ -2137,8 +2138,6 @@ struct elf_obj_tdata
 #define elf_properties(bfd) (elf_tdata (bfd) -> properties)
 #define elf_has_no_copy_on_protected(bfd) \
   (elf_tdata(bfd) -> has_no_copy_on_protected)
-#define elf_has_indirect_extern_access(bfd) \
-  (elf_tdata(bfd) -> has_indirect_extern_access)
 
 extern void _bfd_elf_swap_verdef_in
   (bfd *, const Elf_External_Verdef *, Elf_Internal_Verdef *);
@@ -2483,9 +2482,6 @@ extern char *_bfd_elfcore_strndup
 
 extern Elf_Internal_Rela *_bfd_elf_link_read_relocs
   (bfd *, asection *, void *, Elf_Internal_Rela *, bool);
-extern Elf_Internal_Rela *_bfd_elf_link_info_read_relocs
-  (bfd *, struct bfd_link_info *, asection *, void *, Elf_Internal_Rela *,
-   bool);
 
 extern bool _bfd_elf_link_output_relocs
   (bfd *, asection *, Elf_Internal_Shdr *, Elf_Internal_Rela *,

@@ -93,7 +93,7 @@ mi_cmd_env_cd (const char *command, char **argv, int argc)
 }
 
 static void
-env_mod_path (const char *dirname, std::string &which_path)
+env_mod_path (const char *dirname, char **which_path)
 {
   if (dirname == 0 || dirname[0] == '\0')
     return;
@@ -109,6 +109,7 @@ void
 mi_cmd_env_path (const char *command, char **argv, int argc)
 {
   struct ui_out *uiout = current_uiout;
+  char *exec_path;
   const char *env;
   int reset = 0;
   int oind = 0;
@@ -151,11 +152,11 @@ mi_cmd_env_path (const char *command, char **argv, int argc)
   argv += oind;
   argc -= oind;
 
-  std::string exec_path;
+
   if (reset)
     {
       /* Reset implies resetting to original path first.  */
-      exec_path = orig_path;
+      exec_path = xstrdup (orig_path);
     }
   else
     {
@@ -165,14 +166,14 @@ mi_cmd_env_path (const char *command, char **argv, int argc)
       /* Can be null if path is not set.  */
       if (!env)
 	env = "";
-
-      exec_path = env;
+      exec_path = xstrdup (env);
     }
 
   for (i = argc - 1; i >= 0; --i)
-    env_mod_path (argv[i], exec_path);
+    env_mod_path (argv[i], &exec_path);
 
-  current_inferior ()->environment.set (path_var_name, exec_path.c_str ());
+  current_inferior ()->environment.set (path_var_name, exec_path);
+  xfree (exec_path);
   env = current_inferior ()->environment.get (path_var_name);
   uiout->field_string ("path", env);
 }
@@ -227,11 +228,12 @@ mi_cmd_env_dir (const char *command, char **argv, int argc)
   if (reset)
     {
       /* Reset means setting to default path first.  */
+      xfree (source_path);
       init_source_path ();
     }
 
   for (i = argc - 1; i >= 0; --i)
-    env_mod_path (argv[i], source_path);
+    env_mod_path (argv[i], &source_path);
 
   uiout->field_string ("source-path", source_path);
   forget_cached_source_info ();
@@ -242,10 +244,7 @@ mi_cmd_env_dir (const char *command, char **argv, int argc)
 void
 mi_cmd_inferior_tty_set (const char *command, char **argv, int argc)
 {
-  if (argc > 0)
-    current_inferior ()->set_tty (argv[0]);
-  else
-    current_inferior ()->set_tty ("");
+  current_inferior ()->set_tty (argv[0]);
 }
 
 /* Print the inferior terminal device name.  */
@@ -256,8 +255,8 @@ mi_cmd_inferior_tty_show (const char *command, char **argv, int argc)
   if ( !mi_valid_noargs ("-inferior-tty-show", argc, argv))
     error (_("-inferior-tty-show: Usage: No args"));
 
-  const std::string &inferior_tty = current_inferior ()->tty ();
-  if (!inferior_tty.empty ())
+  const char *inferior_tty = current_inferior ()->tty ();
+  if (inferior_tty != NULL)
     current_uiout->field_string ("inferior_tty_terminal", inferior_tty);
 }
 

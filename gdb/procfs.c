@@ -3576,7 +3576,7 @@ procfs_corefile_thread_callback (procinfo *pi, procinfo *thread, void *data)
 static int
 find_signalled_thread (struct thread_info *info, void *data)
 {
-  if (info->stop_signal () != GDB_SIGNAL_0
+  if (info->suspend.stop_signal != GDB_SIGNAL_0
       && info->ptid.pid () == inferior_ptid.pid ())
     return 1;
 
@@ -3590,7 +3590,7 @@ find_stop_signal (void)
     iterate_over_threads (find_signalled_thread, NULL);
 
   if (info)
-    return info->stop_signal ();
+    return info->suspend.stop_signal;
   else
     return GDB_SIGNAL_0;
 }
@@ -3603,6 +3603,7 @@ procfs_target::make_corefile_notes (bfd *obfd, int *note_size)
   char psargs[80] = {'\0'};
   procinfo *pi = find_procinfo_or_die (inferior_ptid.pid (), 0);
   gdb::unique_xmalloc_ptr<char> note_data;
+  const char *inf_args;
   enum gdb_signal stop_signal;
 
   if (get_exec_file (0))
@@ -3612,13 +3613,14 @@ procfs_target::make_corefile_notes (bfd *obfd, int *note_size)
       strncpy (psargs, get_exec_file (0), sizeof (psargs));
       psargs[sizeof (psargs) - 1] = 0;
 
-      const std::string &inf_args = current_inferior ()->args ();
-      if (!inf_args.empty () &&
-	  inf_args.length () < ((int) sizeof (psargs) - (int) strlen (psargs)))
+      inf_args = get_inferior_args ();
+      if (inf_args && *inf_args
+	  && (strlen (inf_args)
+	      < ((int) sizeof (psargs) - (int) strlen (psargs))))
 	{
 	  strncat (psargs, " ",
 		   sizeof (psargs) - strlen (psargs));
-	  strncat (psargs, inf_args.c_str (),
+	  strncat (psargs, inf_args,
 		   sizeof (psargs) - strlen (psargs));
 	}
     }

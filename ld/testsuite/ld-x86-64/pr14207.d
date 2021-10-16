@@ -5,7 +5,7 @@
 #target: x86_64-*-linux*
 
 Elf file type is DYN \(Shared object file\)
-Entry point 0x[0-9a-f]+
+Entry point 0x149
 There are 4 program headers, starting at offset 64
 
 Program Headers:

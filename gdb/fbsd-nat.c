@@ -890,7 +890,7 @@ fbsd_add_threads (fbsd_nat_target *target, pid_t pid)
 
   for (i = 0; i < nlwps; i++)
     {
-      ptid_t ptid = ptid_t (pid, lwps[i]);
+      ptid_t ptid = ptid_t (pid, lwps[i], 0);
 
       if (!in_thread_list (target, ptid))
 	{
@@ -1045,8 +1045,8 @@ fbsd_nat_target::resume (ptid_t ptid, int step, enum gdb_signal signo)
     return;
 #endif
 
-  fbsd_lwp_debug_printf ("ptid (%d, %ld, %s)", ptid.pid (), ptid.lwp (),
-			 pulongest (ptid.tid ()));
+  fbsd_lwp_debug_printf ("ptid (%d, %ld, %ld)", ptid.pid (), ptid.lwp (),
+			 ptid.tid ());
   if (ptid.lwp_p ())
     {
       /* If ptid is a specific LWP, suspend all other LWPs in the process.  */
@@ -1191,7 +1191,7 @@ fbsd_nat_target::wait (ptid_t ptid, struct target_waitstatus *ourstatus,
 	  if (ptrace (PT_LWPINFO, pid, (caddr_t) &pl, sizeof pl) == -1)
 	    perror_with_name (("ptrace"));
 
-	  wptid = ptid_t (pid, pl.pl_lwpid);
+	  wptid = ptid_t (pid, pl.pl_lwpid, 0);
 
 	  if (debug_fbsd_nat)
 	    {
@@ -1287,7 +1287,7 @@ fbsd_nat_target::wait (ptid_t ptid, struct target_waitstatus *ourstatus,
 		    perror_with_name (("ptrace"));
 
 		  gdb_assert (pl.pl_flags & PL_FLAG_CHILD);
-		  child_ptid = ptid_t (child, pl.pl_lwpid);
+		  child_ptid = ptid_t (child, pl.pl_lwpid, 0);
 		}
 
 	      /* Enable additional events on the child process.  */
@@ -1472,16 +1472,12 @@ fbsd_nat_target::create_inferior (const char *exec_file,
    the ptid of the followed inferior.  */
 
 void
-fbsd_nat_target::follow_fork (inferior *child_inf, ptid_t child_ptid,
-			      target_waitkind fork_kind, bool follow_child,
-			      bool detach_fork)
+fbsd_nat_target::follow_fork (bool follow_child, bool detach_fork)
 {
-  inf_ptrace_target::follow_fork (child_inf, child_ptid, fork_kind,
-				  follow_child, detach_fork);
-
   if (!follow_child && detach_fork)
     {
-      pid_t child_pid = child_ptid.pid ();
+      struct thread_info *tp = inferior_thread ();
+      pid_t child_pid = tp->pending_follow.value.related_pid.pid ();
 
       /* Breakpoints have already been detached from the child by
 	 infrun.c.  */
@@ -1490,7 +1486,7 @@ fbsd_nat_target::follow_fork (inferior *child_inf, ptid_t child_ptid,
 	perror_with_name (("ptrace"));
 
 #ifndef PTRACE_VFORK
-      if (fork_kind == TARGET_WAITKIND_VFORKED)
+      if (tp->pending_follow.kind == TARGET_WAITKIND_VFORKED)
 	{
 	  /* We can't insert breakpoints until the child process has
 	     finished with the shared memory region.  The parent
@@ -1604,52 +1600,6 @@ fbsd_nat_target::supports_disable_randomization ()
 #else
   return false;
 #endif
-}
-
-/* See fbsd-nat.h.  */
-
-void
-fbsd_nat_target::fetch_register_set (struct regcache *regcache, int regnum,
-				     int fetch_op, const struct regset *regset,
-				     void *regs, size_t size)
-{
-  const struct regcache_map_entry *map
-    = (const struct regcache_map_entry *) regset->regmap;
-  pid_t pid = get_ptrace_pid (regcache->ptid ());
-
-  if (regnum == -1 || regcache_map_supplies (map, regnum, regcache->arch(),
-					     size))
-    {
-      if (ptrace (fetch_op, pid, (PTRACE_TYPE_ARG3) regs, 0) == -1)
-	perror_with_name (_("Couldn't get registers"));
-
-      regcache->supply_regset (regset, regnum, regs, size);
-    }
-}
-
-/* See fbsd-nat.h.  */
-
-void
-fbsd_nat_target::store_register_set (struct regcache *regcache, int regnum,
-				     int fetch_op, int store_op,
-				     const struct regset *regset, void *regs,
-				     size_t size)
-{
-  const struct regcache_map_entry *map
-    = (const struct regcache_map_entry *) regset->regmap;
-  pid_t pid = get_ptrace_pid (regcache->ptid ());
-
-  if (regnum == -1 || regcache_map_supplies (map, regnum, regcache->arch(),
-					     size))
-    {
-      if (ptrace (fetch_op, pid, (PTRACE_TYPE_ARG3) regs, 0) == -1)
-	perror_with_name (_("Couldn't get registers"));
-
-      regcache->collect_regset (regset, regnum, regs, size);
-
-      if (ptrace (store_op, pid, (PTRACE_TYPE_ARG3) regs, 0) == -1)
-	perror_with_name (_("Couldn't write registers"));
-    }
 }
 
 void _initialize_fbsd_nat ();

@@ -19,7 +19,6 @@
 
 #include "defs.h"
 #include "dwarf2.h"
-#include "objfiles.h"
 #include "dwarf2/expr.h"
 #include "dwarf2/loc.h"
 #include "dwarf2/read.h"

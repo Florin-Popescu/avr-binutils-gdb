@@ -2130,8 +2130,7 @@ NAME (aout, swap_ext_reloc_out) (bfd *abfd,
   if (r_extern)								\
     {									\
       /* Undefined symbol.  */						\
-      if (r_index < bfd_get_symcount (abfd))				\
-	cache_ptr->sym_ptr_ptr = symbols + r_index;			\
+      cache_ptr->sym_ptr_ptr = symbols + r_index;			\
       cache_ptr->addend = ad;						\
     }									\
    else									\
@@ -4022,7 +4021,7 @@ aout_link_input_section_std (struct aout_final_link_info *flaginfo,
   for (; rel < rel_end; rel++)
     {
       bfd_vma r_addr;
-      unsigned int r_index;
+      int r_index;
       int r_extern;
       int r_pcrel;
       int r_baserel = 0;
@@ -4134,7 +4133,7 @@ aout_link_input_section_std (struct aout_final_link_info *flaginfo,
 		     map.  */
 		  r_index = symbol_map[r_index];
 
-		  if (r_index == -1u)
+		  if (r_index == -1)
 		    {
 		      if (h != NULL)
 			{
@@ -4370,7 +4369,7 @@ aout_link_input_section_ext (struct aout_final_link_info *flaginfo,
   for (; rel < rel_end; rel++)
     {
       bfd_vma r_addr;
-      unsigned int r_index;
+      int r_index;
       int r_extern;
       unsigned int r_type;
       bfd_vma r_addend;
@@ -4470,7 +4469,7 @@ aout_link_input_section_ext (struct aout_final_link_info *flaginfo,
 		     map.  */
 		  r_index = symbol_map[r_index];
 
-		  if (r_index == -1u)
+		  if (r_index == -1)
 		    {
 		      if (h != NULL)
 			{

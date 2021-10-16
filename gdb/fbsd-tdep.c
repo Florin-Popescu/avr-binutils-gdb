@@ -634,7 +634,7 @@ fbsd_core_xfer_siginfo (struct gdbarch *gdbarch, gdb_byte *readbuf,
 static int
 find_signalled_thread (struct thread_info *info, void *data)
 {
-  if (info->stop_signal () != GDB_SIGNAL_0
+  if (info->suspend.stop_signal != GDB_SIGNAL_0
       && info->ptid.pid () == inferior_ptid.pid ())
     return 1;
 
@@ -684,9 +684,9 @@ fbsd_make_corefile_notes (struct gdbarch *gdbarch, bfd *obfd, int *note_size)
       const char *fname = lbasename (get_exec_file (0));
       std::string psargs = fname;
 
-      const std::string &infargs = current_inferior ()->args ();
-      if (!infargs.empty ())
-	psargs += ' ' + infargs;
+      const char *infargs = get_inferior_args ();
+      if (infargs != NULL)
+	psargs = psargs + " " + infargs;
 
       note_data.reset (elfcore_write_prpsinfo (obfd, note_data.release (),
 					       note_size, fname,
@@ -708,7 +708,7 @@ fbsd_make_corefile_notes (struct gdbarch *gdbarch, bfd *obfd, int *note_size)
      In case there's more than one signalled thread, prefer the
      current thread, if it is signalled.  */
   curr_thr = inferior_thread ();
-  if (curr_thr->stop_signal () != GDB_SIGNAL_0)
+  if (curr_thr->suspend.stop_signal != GDB_SIGNAL_0)
     signalled_thr = curr_thr;
   else
     {
@@ -717,7 +717,7 @@ fbsd_make_corefile_notes (struct gdbarch *gdbarch, bfd *obfd, int *note_size)
 	signalled_thr = curr_thr;
     }
 
-  enum gdb_signal stop_signal = signalled_thr->stop_signal ();
+  enum gdb_signal stop_signal = signalled_thr->suspend.stop_signal;
   gcore_elf_build_thread_register_notes (gdbarch, signalled_thr, stop_signal,
 					 obfd, &note_data, note_size);
   for (thread_info *thr : current_inferior ()->non_exited_threads ())

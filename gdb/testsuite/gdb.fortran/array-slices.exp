@@ -38,7 +38,7 @@ if {[skip_fortran_tests]} { return -1 }
 standard_testfile ".f90"
 load_lib fortran.exp
 
-if {[build_executable ${testfile}.exp ${testfile} ${srcfile} \
+if {[prepare_for_testing ${testfile}.exp ${testfile} ${srcfile} \
 	 {debug f90}]} {
     return -1
 }
@@ -56,6 +56,7 @@ proc run_test { repack } {
     clean_restart ${binfile}
 
     if ![fortran_runto_main] {
+	untested "could not run to main"
 	return -1
     }
 

@@ -3742,7 +3742,8 @@ mmix_frob_file (void)
       /* This case isn't doable in general anyway, methinks.  */
       if (fixP->fx_subsy != NULL)
 	{
-	  as_bad_subtract (fixP);
+	  as_bad_where (fixP->fx_file, fixP->fx_line,
+			_("GREG expression too complicated"));
 	  continue;
 	}
 

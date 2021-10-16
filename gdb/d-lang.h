@@ -62,8 +62,7 @@ extern int d_parse (struct parser_state *);
 
 extern const char *d_main_name (void);
 
-extern gdb::unique_xmalloc_ptr<char> d_demangle (const char *mangled,
-						 int options);
+extern char *d_demangle (const char *mangled, int options);
 
 extern const struct builtin_d_type *builtin_d_type (struct gdbarch *);
 

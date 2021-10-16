@@ -231,12 +231,12 @@ cp_print_value_fields (struct value *val, struct ui_file *stream,
 	    {
 	      fputs_filtered ("static ", stream);
 	      fprintf_symbol_filtered (stream,
-				       type->field (i).name (),
+				       TYPE_FIELD_NAME (type, i),
 				       current_language->la_language,
 				       DMGL_PARAMS | DMGL_ANSI);
 	    }
 	  else
-	    fputs_styled (type->field (i).name (),
+	    fputs_styled (TYPE_FIELD_NAME (type, i),
 			  variable_name_style.style (), stream);
 	  annotate_field_name_end ();
 
@@ -246,7 +246,7 @@ cp_print_value_fields (struct value *val, struct ui_file *stream,
 
 	  /* Do not print leading '=' in case of anonymous
 	     unions.  */
-	  if (strcmp (type->field (i).name (), ""))
+	  if (strcmp (TYPE_FIELD_NAME (type, i), ""))
 	    fputs_filtered (" = ", stream);
 	  else
 	    {
@@ -710,7 +710,7 @@ cp_print_class_member (const gdb_byte *valaddr, struct type *type,
       else
 	c_type_print_base (self_type, stream, 0, 0, &type_print_raw_options);
       fprintf_filtered (stream, "::");
-      fputs_styled (self_type->field (fieldno).name (),
+      fputs_styled (TYPE_FIELD_NAME (self_type, fieldno),
 		    variable_name_style.style (), stream);
     }
   else

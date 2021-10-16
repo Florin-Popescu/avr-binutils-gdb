@@ -264,12 +264,6 @@ struct lval_funcs
      TOVAL is not considered as an lvalue.  */
   void (*write) (struct value *toval, struct value *fromval);
 
-  /* Return true if any part of V is optimized out, false otherwise.
-     This will only be called for lazy values -- if the value has been
-     fetched, then the value's optimized-out bits are consulted
-     instead.  */
-  bool (*is_optimized_out) (struct value *v);
-
   /* If non-NULL, this is used to implement pointer indirection for
      this value.  This method may return NULL, in which case value_ind
      will fall back to ordinary indirection.  */
@@ -463,6 +457,12 @@ extern struct internalvar **deprecated_value_internalvar_hack (struct value *);
    frame id of F->next will be stored in VALUE_NEXT_FRAME_ID.  */
 extern struct frame_id *deprecated_value_next_frame_id_hack (struct value *);
 #define VALUE_NEXT_FRAME_ID(val) (*deprecated_value_next_frame_id_hack (val))
+
+/* Frame ID of frame to which a register value is relative.  This is
+   similar to VALUE_NEXT_FRAME_ID, above, but may not be assigned to. 
+   Note that VALUE_FRAME_ID effectively undoes the "next" operation
+   that was performed during the assignment to VALUE_NEXT_FRAME_ID.  */
+#define VALUE_FRAME_ID(val) (get_prev_frame_id_by_id (VALUE_NEXT_FRAME_ID (val)))
 
 /* Register number if the value is from a register.  */
 extern int *deprecated_value_regnum_hack (struct value *);
@@ -1028,15 +1028,7 @@ extern int value_equal_contents (struct value *arg1, struct value *arg2);
 
 extern int value_less (struct value *arg1, struct value *arg2);
 
-/* Simulate the C operator ! -- return true if ARG1 contains zero.  */
-extern bool value_logical_not (struct value *arg1);
-
-/* Returns true if the value VAL represents a true value.  */
-static inline bool
-value_true (struct value *val)
-{
-  return !value_logical_not (val);
-}
+extern int value_logical_not (struct value *arg1);
 
 /* C++ */
 

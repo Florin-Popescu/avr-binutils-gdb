@@ -53,6 +53,7 @@ gdb_test "python print (progspace.random_attribute)" "42" \
     "Verify set of random attribute in progspace"
 
 if {![runto_main]} {
+    fail "can't run to main"
     return
 }
 

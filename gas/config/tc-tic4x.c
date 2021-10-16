@@ -383,11 +383,9 @@ tic4x_gen_to_words (FLONUM_TYPE flonum, LITTLENUM_TYPE *words, int precision)
 
   /* 0.0e0 or NaN seen.  */
   if (flonum.low > flonum.leader  /* = 0.0e0 */
-      || flonum.sign == 0 /* = NaN */
-      || flonum.sign == 'Q' || flonum.sign == 'q' /* = QNaN */
-      || flonum.sign == 'S' || flonum.sign == 's') /* = SNaN */
+      || flonum.sign == 0) /* = NaN */
     {
-      if (flonum.sign != '+' && flonum.sign != '-')
+      if(flonum.sign == 0)
         as_bad (_("Nan, using zero."));
       words[0] = 0x8000;
       return return_value;

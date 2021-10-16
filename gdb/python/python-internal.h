@@ -92,6 +92,7 @@
 #endif
 
 #ifdef IS_PY3K
+#define Py_TPFLAGS_HAVE_ITER 0
 #define Py_TPFLAGS_CHECKTYPES 0
 
 #define PyInt_Check PyLong_Check
@@ -411,7 +412,6 @@ extern enum ext_lang_rc gdbpy_get_matching_xmethod_workers
 
 
 PyObject *gdbpy_history (PyObject *self, PyObject *args);
-PyObject *gdbpy_add_history (PyObject *self, PyObject *args);
 PyObject *gdbpy_convenience_variable (PyObject *self, PyObject *args);
 PyObject *gdbpy_set_convenience_variable (PyObject *self, PyObject *args);
 PyObject *gdbpy_breakpoints (PyObject *, PyObject *);
@@ -438,7 +438,7 @@ PyObject *gdbpy_create_ptid_object (ptid_t ptid);
 PyObject *gdbpy_selected_thread (PyObject *self, PyObject *args);
 PyObject *gdbpy_selected_inferior (PyObject *self, PyObject *args);
 PyObject *gdbpy_string_to_argv (PyObject *self, PyObject *args);
-PyObject *gdbpy_parameter_value (const setting &var);
+PyObject *gdbpy_parameter_value (enum var_types type, void *var);
 gdb::unique_xmalloc_ptr<char> gdbpy_parse_command_name
   (const char *name, struct cmd_list_element ***base_list,
    struct cmd_list_element **start_list);

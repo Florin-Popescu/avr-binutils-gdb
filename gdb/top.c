@@ -84,6 +84,8 @@
 
 extern void initialize_all_files (void);
 
+static bool history_filename_empty (void);
+
 #define PROMPT(X) the_prompts.prompt_stack[the_prompts.top + X].prompt
 #define PREFIX(X) the_prompts.prompt_stack[the_prompts.top + X].prefix
 #define SUFFIX(X) the_prompts.prompt_stack[the_prompts.top + X].suffix
@@ -333,11 +335,13 @@ ui::~ui ()
 static gdb_file_up
 open_terminal_stream (const char *name)
 {
-  scoped_fd fd = gdb_open_cloexec (name, O_RDWR | O_NOCTTY, 0);
-  if (fd.get () < 0)
+  int fd;
+
+  fd = gdb_open_cloexec (name, O_RDWR | O_NOCTTY, 0);
+  if (fd < 0)
     perror_with_name  (_("opening terminal failed"));
 
-  return fd.to_file ("w+");
+  return gdb_file_up (fdopen (fd, "w+"));
 }
 
 /* Implementation of the "new-ui" command.  */
@@ -692,10 +696,12 @@ execute_command (const char *p, int from_tty)
   cleanup_if_error.release ();
 }
 
-/* See gdbcmd.h.  */
+/* Run execute_command for P and FROM_TTY.  Sends its output to FILE,
+   do not display it to the screen.  BATCH_FLAG will be
+   temporarily set to true.  */
 
 void
-execute_fn_to_ui_file (struct ui_file *file, std::function<void(void)> fn)
+execute_command_to_ui_file (struct ui_file *file, const char *p, int from_tty)
 {
   /* GDB_STDOUT should be better already restored during these
      restoration callbacks.  */
@@ -718,28 +724,8 @@ execute_fn_to_ui_file (struct ui_file *file, std::function<void(void)> fn)
     scoped_restore save_stdtargerr
       = make_scoped_restore (&gdb_stdtargerr, file);
 
-    fn ();
+    execute_command (p, from_tty);
   }
-}
-
-/* See gdbcmd.h.  */
-
-std::string
-execute_fn_to_string (std::function<void(void)> fn, bool term_out)
-{
-  string_file str_file (term_out);
-
-  execute_fn_to_ui_file (&str_file, fn);
-  return std::move (str_file.string ());
-}
-
-/* See gdbcmd.h.  */
-
-void
-execute_command_to_ui_file (struct ui_file *file,
-			    const char *p, int from_tty)
-{
-  execute_fn_to_ui_file (file, [=]() { execute_command (p, from_tty); });
 }
 
 /* See gdbcmd.h.  */
@@ -748,9 +734,12 @@ std::string
 execute_command_to_string (const char *p, int from_tty,
 			   bool term_out)
 {
-  return
-    execute_fn_to_string ([=]() { execute_command (p, from_tty); }, term_out);
+  string_file str_file (term_out);
+
+  execute_command_to_ui_file (&str_file, p, from_tty);
+  return std::move (str_file.string ());
 }
+
 
 /* When nonzero, cause dont_repeat to do nothing.  This should only be
    set via prevent_dont_repeat.  */
@@ -919,16 +908,12 @@ static bool command_editing_p;
    variable must be set to something sensible.  */
 static bool write_history_p;
 
-/* The name of the file in which GDB history will be written.  If this is
-   set to NULL, of the empty string then history will not be written.  */
-static std::string history_filename;
-
 /* Implement 'show history save'.  */
 static void
 show_write_history_p (struct ui_file *file, int from_tty,
 		      struct cmd_list_element *c, const char *value)
 {
-  if (!write_history_p || !history_filename.empty ())
+  if (!write_history_p || !history_filename_empty ())
     fprintf_filtered (file, _("Saving of the history record on exit is %s.\n"),
 		      value);
   else
@@ -962,12 +947,24 @@ show_history_remove_duplicates (struct ui_file *file, int from_tty,
 		    value);
 }
 
+/* The name of the file in which GDB history will be written.  If this is
+   set to NULL, of the empty string then history will not be written.  */
+static char *history_filename;
+
+/* Return true if the history_filename is either NULL or the empty string,
+   indicating that we should not try to read, nor write out the history.  */
+static bool
+history_filename_empty (void)
+{
+  return (history_filename == nullptr || *history_filename == '\0');
+}
+
 /* Implement 'show history filename'.  */
 static void
 show_history_filename (struct ui_file *file, int from_tty,
 		       struct cmd_list_element *c, const char *value)
 {
-  if (!history_filename.empty ())
+  if (!history_filename_empty ())
     fprintf_filtered (file, _("The filename in which to record "
 			      "the command history is \"%ps\".\n"),
 		      styled_string (file_name_style.style (), value));
@@ -1234,15 +1231,14 @@ gdb_safe_append_history (void)
   int ret, saved_errno;
 
   std::string local_history_filename
-    = string_printf ("%s-gdb%ld~", history_filename.c_str (), (long) getpid ());
+    = string_printf ("%s-gdb%ld~", history_filename, (long) getpid ());
 
-  ret = rename (history_filename.c_str (), local_history_filename.c_str ());
+  ret = rename (history_filename, local_history_filename.c_str ());
   saved_errno = errno;
   if (ret < 0 && saved_errno != ENOENT)
     {
       warning (_("Could not rename %ps to %ps: %s"),
-	       styled_string (file_name_style.style (),
-			      history_filename.c_str ()),
+	       styled_string (file_name_style.style (), history_filename),
 	       styled_string (file_name_style.style (),
 			      local_history_filename.c_str ()),
 	       safe_strerror (saved_errno));
@@ -1270,11 +1266,11 @@ gdb_safe_append_history (void)
 				   history_max_entries);
 	}
 
-      ret = rename (local_history_filename.c_str (), history_filename.c_str ());
+      ret = rename (local_history_filename.c_str (), history_filename);
       saved_errno = errno;
       if (ret < 0 && saved_errno != EEXIST)
 	warning (_("Could not rename %s to %s: %s"),
-		 local_history_filename.c_str (), history_filename.c_str (),
+		 local_history_filename.c_str (), history_filename,
 		 safe_strerror (saved_errno));
     }
 }
@@ -1647,12 +1643,12 @@ tree, and GDB will still find it.)\n\
 
 /* The current top level prompt, settable with "set prompt", and/or
    with the python `gdb.prompt_hook' hook.  */
-static std::string top_prompt;
+static char *top_prompt;
 
 /* Access method for the GDB prompt string.  */
 
-const std::string &
-get_prompt ()
+char *
+get_prompt (void)
 {
   return top_prompt;
 }
@@ -1662,7 +1658,10 @@ get_prompt ()
 void
 set_prompt (const char *s)
 {
-  top_prompt = s;
+  char *p = xstrdup (s);
+
+  xfree (top_prompt);
+  top_prompt = p;
 }
 
 
@@ -1761,16 +1760,14 @@ quit_force (int *exit_arg, int from_tty)
 {
   int exit_code = 0;
 
+  undo_terminal_modifications_before_exit ();
+
   /* An optional expression may be used to cause gdb to terminate with the
      value of that expression.  */
   if (exit_arg)
     exit_code = *exit_arg;
   else if (return_child_result)
     exit_code = return_child_result_value;
-
-  gdb::observers::gdb_exiting.notify (exit_code);
-
-  undo_terminal_modifications_before_exit ();
 
   /* We want to handle any quit errors and exit regardless.  */
 
@@ -1804,7 +1801,7 @@ quit_force (int *exit_arg, int from_tty)
   /* Save the history information if it is appropriate to do so.  */
   try
     {
-      if (write_history_p && !history_filename.empty ())
+      if (write_history_p && history_filename)
 	{
 	  int save = 0;
 
@@ -2052,8 +2049,27 @@ init_history (void)
 
   set_readline_history_size (history_size_setshow_var);
 
-  if (!history_filename.empty ())
-    read_history (history_filename.c_str ());
+  tmpenv = getenv ("GDBHISTFILE");
+  if (tmpenv != nullptr)
+    history_filename = xstrdup (tmpenv);
+  else if (history_filename == nullptr)
+    {
+      /* We include the current directory so that if the user changes
+	 directories the file written will be the same as the one
+	 that was read.  */
+#ifdef __MSDOS__
+      /* No leading dots in file names are allowed on MSDOS.  */
+      const char *fname = "_gdb_history";
+#else
+      const char *fname = ".gdb_history";
+#endif
+
+      gdb::unique_xmalloc_ptr<char> temp (gdb_abspath (fname));
+      history_filename = temp.release ();
+    }
+
+  if (!history_filename_empty ())
+    read_history (history_filename);
 }
 
 static void
@@ -2103,20 +2119,21 @@ show_exec_done_display_p (struct ui_file *file, int from_tty,
    Extension languages, for example Python's gdb.parameter API, will read
    the value directory from this variable, so we must ensure that this
    always contains the correct value.  */
-static std::string staged_gdb_datadir;
+static char *staged_gdb_datadir;
 
 /* "set" command for the gdb_datadir configuration variable.  */
 
 static void
 set_gdb_datadir (const char *args, int from_tty, struct cmd_list_element *c)
 {
-  set_gdb_data_directory (staged_gdb_datadir.c_str ());
+  set_gdb_data_directory (staged_gdb_datadir);
 
   /* SET_GDB_DATA_DIRECTORY will resolve relative paths in
      STAGED_GDB_DATADIR, so we now copy the value from GDB_DATADIR
      back into STAGED_GDB_DATADIR so the extension languages can read the
      correct value.  */
-  staged_gdb_datadir = gdb_datadir;
+  free (staged_gdb_datadir);
+  staged_gdb_datadir = strdup (gdb_datadir.c_str ());
 
   gdb::observers::gdb_datadir_changed.notify ();
 }
@@ -2141,13 +2158,12 @@ set_history_filename (const char *args,
   /* We include the current directory so that if the user changes
      directories the file written will be the same as the one
      that was read.  */
-  if (!history_filename.empty ()
-      && !IS_ABSOLUTE_PATH (history_filename.c_str ()))
+  if (!history_filename_empty () && !IS_ABSOLUTE_PATH (history_filename))
     {
-      gdb::unique_xmalloc_ptr<char> temp
-	(gdb_abspath (history_filename.c_str ()));
+      gdb::unique_xmalloc_ptr<char> temp (gdb_abspath (history_filename));
 
-      history_filename = temp.get ();
+      xfree (history_filename);
+      history_filename = temp.release ();
     }
 }
 
@@ -2313,7 +2329,7 @@ When set, GDB uses the specified path to search for data files."),
 			   &setlist,
 			    &showlist);
   /* Prime the initial value for data-directory.  */
-  staged_gdb_datadir = gdb_datadir;
+  staged_gdb_datadir = strdup (gdb_datadir.c_str ());
 
   add_setshow_auto_boolean_cmd ("interactive-mode", class_support,
 				&interactive_mode, _("\
@@ -2387,7 +2403,7 @@ gdb_init ()
      to alter it.  */
   set_initial_gdb_ttystate ();
 
-  gdb_init_signals ();
+  async_init_signals ();
 
   /* We need a default language for parsing expressions, so simple
      things like "set width 0" won't fail if no language is explicitly
@@ -2398,29 +2414,4 @@ gdb_init ()
 
   /* Create $_gdb_major and $_gdb_minor convenience variables.  */
   init_gdb_version_vars ();
-}
-
-void _initialize_top ();
-void
-_initialize_top ()
-{
-  /* Determine a default value for the history filename.  */
-  const char *tmpenv = getenv ("GDBHISTFILE");
-  if (tmpenv != nullptr)
-    history_filename = tmpenv;
-  else
-    {
-      /* We include the current directory so that if the user changes
-	 directories the file written will be the same as the one
-	 that was read.  */
-#ifdef __MSDOS__
-      /* No leading dots in file names are allowed on MSDOS.  */
-      const char *fname = "_gdb_history";
-#else
-      const char *fname = ".gdb_history";
-#endif
-
-      gdb::unique_xmalloc_ptr<char> temp (gdb_abspath (fname));
-      history_filename = temp.get ();
-    }
 }

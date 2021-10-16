@@ -1542,13 +1542,6 @@ filter_symbols (bfd *abfd, bfd *obfd, asymbol **osyms,
 	{
 	  char *new_name;
 
-	  if (name[0] == '_'
-	      && name[1] == '_'
-	      && strcmp (name + (name[2] == '_'), "__gnu_lto_slim") == 0)
-	    {
-	      fatal (_("redefining symbols does not work on LTO-compiled object files"));
-	    }
-	  
 	  new_name = (char *) lookup_sym_redefinition (name);
 	  if (new_name == name
 	      && (flags & BSF_SECTION_SYM) != 0)
@@ -3607,7 +3600,6 @@ copy_archive (bfd *ibfd, bfd *obfd, const char *output_target,
 
       if (preserve_dates)
 	{
-	  memset (&buf, 0, sizeof (buf));
 	  stat_status = bfd_stat_arch_elt (this_element, &buf);
 
 	  if (stat_status != 0)

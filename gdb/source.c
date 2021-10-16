@@ -57,7 +57,7 @@
 /* Path of directories to search for source files.
    Same format as the PATH environment variable's value.  */
 
-std::string source_path;
+char *source_path;
 
 /* Support for source path substitution commands.  */
 
@@ -148,21 +148,7 @@ show_filename_display_string (struct ui_file *file, int from_tty,
 {
   fprintf_filtered (file, _("Filenames are displayed as \"%s\".\n"), value);
 }
-
-/* When true GDB will stat and open source files as required, but when
-   false, GDB will avoid accessing source files as much as possible.  */
-
-static bool source_open = true;
-
-/* Implement 'show source open'.  */
-
-static void
-show_source_open (struct ui_file *file, int from_tty,
-		  struct cmd_list_element *c, const char *value)
-{
-  fprintf_filtered (file, _("Source opening is \"%s\".\n"), value);
-}
-
+ 
 /* Line number of last line printed.  Default for various commands.
    current_source_line is usually, but not always, the same as this.  */
 
@@ -379,15 +365,17 @@ set_directories_command (const char *args,
 {
   /* This is the value that was set.
      It needs to be processed to maintain $cdir:$cwd and remove dups.  */
-  std::string set_path = source_path;
+  char *set_path = source_path;
 
   /* We preserve the invariant that $cdir:$cwd begins life at the end of
      the list by calling init_source_path.  If they appear earlier in
      SET_PATH then mod_path will move them appropriately.
      mod_path will also remove duplicates.  */
   init_source_path ();
-  if (!set_path.empty ())
-    mod_path (set_path.c_str (), source_path);
+  if (*set_path != '\0')
+    mod_path (set_path, &source_path);
+
+  xfree (set_path);
 }
 
 /* Print the list of source directories.
@@ -398,7 +386,7 @@ static void
 show_directories_1 (char *ignore, int from_tty)
 {
   puts_filtered ("Source directories searched: ");
-  puts_filtered (source_path.c_str ());
+  puts_filtered (source_path);
   puts_filtered ("\n");
 }
 
@@ -449,7 +437,10 @@ forget_cached_source_info (void)
 void
 init_source_path (void)
 {
-  source_path = string_printf ("$cdir%c$cwd", DIRNAME_SEPARATOR);
+  char buf[20];
+
+  xsnprintf (buf, sizeof (buf), "$cdir%c$cwd", DIRNAME_SEPARATOR);
+  source_path = xstrdup (buf);
   forget_cached_source_info ();
 }
 
@@ -465,20 +456,20 @@ directory_command (const char *dirname, int from_tty)
     {
       if (!from_tty || query (_("Reinitialize source path to empty? ")))
 	{
+	  xfree (source_path);
 	  init_source_path ();
 	  value_changed = true;
 	}
     }
   else
     {
-      mod_path (dirname, source_path);
+      mod_path (dirname, &source_path);
       forget_cached_source_info ();
       value_changed = true;
     }
   if (value_changed)
     {
-      gdb::observers::command_param_changed.notify ("directories",
-						    source_path.c_str ());
+      gdb::observers::command_param_changed.notify ("directories", source_path);
       if (from_tty)
 	show_directories_1 ((char *) 0, from_tty);
     }
@@ -490,13 +481,13 @@ directory_command (const char *dirname, int from_tty)
 void
 directory_switch (const char *dirname, int from_tty)
 {
-  add_path (dirname, source_path, 0);
+  add_path (dirname, &source_path, 0);
 }
 
 /* Add zero or more directories to the front of an arbitrary path.  */
 
 void
-mod_path (const char *dirname, std::string &which_path)
+mod_path (const char *dirname, char **which_path)
 {
   add_path (dirname, which_path, 1);
 }
@@ -684,17 +675,6 @@ add_path (const char *dirname, char **which_path, int parse_separators)
     }
 }
 
-/* add_path would need to be re-written to work on an std::string, but this is
-   not trivial.  Hence this overload which copies to a `char *` and back.  */
-
-void
-add_path (const char *dirname, std::string &which_path, int parse_separators)
-{
-  char *which_path_copy = xstrdup (which_path.data ());
-  add_path (dirname, &which_path_copy, parse_separators);
-  which_path = which_path_copy;
-  xfree (which_path_copy);
-}
 
 static void
 info_source_command (const char *ignore, int from_tty)
@@ -838,7 +818,7 @@ openp (const char *path, openp_flags opts, const char *string,
 	{
 	  filename = (char *) alloca (strlen (string) + 1);
 	  strcpy (filename, string);
-	  fd = gdb_open_cloexec (filename, mode, 0).release ();
+	  fd = gdb_open_cloexec (filename, mode, 0);
 	  if (fd >= 0)
 	    goto done;
 	  last_errno = errno;
@@ -930,7 +910,7 @@ openp (const char *path, openp_flags opts, const char *string,
 
       if (is_regular_file (filename, &reg_file_errno))
 	{
-	  fd = gdb_open_cloexec (filename, mode, 0).release ();
+	  fd = gdb_open_cloexec (filename, mode, 0);
 	  if (fd >= 0)
 	    break;
 	  last_errno = errno;
@@ -973,7 +953,7 @@ source_full_path_of (const char *filename,
 {
   int fd;
 
-  fd = openp (source_path.c_str (),
+  fd = openp (source_path,
 	      OPF_TRY_CWD_FIRST | OPF_SEARCH_IN_PATH | OPF_RETURN_REALPATH,
 	      filename, O_RDONLY, full_pathname);
   if (fd < 0)
@@ -1064,17 +1044,12 @@ find_and_open_source (const char *filename,
 		      const char *dirname,
 		      gdb::unique_xmalloc_ptr<char> *fullname)
 {
-  const char *path = source_path.c_str ();
-  std::string expanded_path_holder;
+  char *path = source_path;
   const char *p;
-
-  /* If reading of source files is disabled then return a result indicating
-     the attempt to read this source file failed.  GDB will then display
-     the filename and line number instead.  */
-  if (!source_open)
-    return scoped_fd (-1);
+  int result;
 
   /* Quick way out if we already know its full name.  */
+
   if (*fullname)
     {
       /* The user may have requested that source paths be rewritten
@@ -1086,11 +1061,11 @@ find_and_open_source (const char *filename,
       if (rewritten_fullname != NULL)
 	*fullname = std::move (rewritten_fullname);
 
-      scoped_fd result = gdb_open_cloexec (fullname->get (), OPEN_MODE, 0);
-      if (result.get () >= 0)
+      result = gdb_open_cloexec (fullname->get (), OPEN_MODE, 0);
+      if (result >= 0)
 	{
 	  *fullname = gdb_realpath (fullname->get ());
-	  return result;
+	  return scoped_fd (result);
 	}
 
       /* Didn't work -- free old one, try again.  */
@@ -1111,22 +1086,19 @@ find_and_open_source (const char *filename,
       /* Replace a path entry of $cdir with the compilation directory
 	 name.  */
 #define	cdir_len	5
-      p = strstr (source_path.c_str (), "$cdir");
+      p = strstr (source_path, "$cdir");
       if (p && (p == path || p[-1] == DIRNAME_SEPARATOR)
 	  && (p[cdir_len] == DIRNAME_SEPARATOR || p[cdir_len] == '\0'))
 	{
-	  int len = p - source_path.c_str ();
+	  int len;
 
-	  /* Before $cdir */
-	  expanded_path_holder = source_path.substr (0, len);
-
-	  /* new stuff */
-	  expanded_path_holder += dirname;
-
-	  /* After $cdir */
-	  expanded_path_holder += source_path.c_str () + len + cdir_len;
-
-	  path = expanded_path_holder.c_str ();
+	  path = (char *)
+	    alloca (strlen (source_path) + 1 + strlen (dirname) + 1);
+	  len = p - source_path;
+	  strncpy (path, source_path, len);	/* Before $cdir */
+	  strcpy (path + len, dirname);		/* new stuff */
+	  strcat (path + len, source_path + len + cdir_len);	/* After
+								   $cdir */
 	}
     }
 
@@ -1137,8 +1109,8 @@ find_and_open_source (const char *filename,
     filename = rewritten_filename.get ();
 
   /* Try to locate file using filename.  */
-  int result = openp (path, OPF_SEARCH_IN_PATH | OPF_RETURN_REALPATH, filename,
-		      OPEN_MODE, fullname);
+  result = openp (path, OPF_SEARCH_IN_PATH | OPF_RETURN_REALPATH, filename,
+		  OPEN_MODE, fullname);
   if (result < 0 && dirname != NULL)
     {
       /* Remove characters from the start of PATH that we don't need when
@@ -1221,34 +1193,6 @@ open_source_file (struct symtab *s)
   return fd;
 }
 
-/* See source.h.  */
-
-gdb::unique_xmalloc_ptr<char>
-find_source_or_rewrite (const char *filename, const char *dirname)
-{
-  gdb::unique_xmalloc_ptr<char> fullname;
-
-  scoped_fd fd = find_and_open_source (filename, dirname, &fullname);
-  if (fd.get () < 0)
-    {
-      /* rewrite_source_path would be applied by find_and_open_source, we
-	 should report the pathname where GDB tried to find the file.  */
-
-      if (dirname == nullptr || IS_ABSOLUTE_PATH (filename))
-	fullname.reset (xstrdup (filename));
-      else
-	fullname.reset (concat (dirname, SLASH_STRING,
-				filename, (char *) nullptr));
-
-      gdb::unique_xmalloc_ptr<char> rewritten
-	= rewrite_source_path (fullname.get ());
-      if (rewritten != nullptr)
-	fullname = std::move (rewritten);
-    }
-
-  return fullname;
-}
-
 /* Finds the fullname that a symtab represents.
 
    This functions finds the fullname and saves it in s->fullname.
@@ -1328,7 +1272,7 @@ print_source_lines_base (struct symtab *s, int line, int stopline,
 
   /* If printing of source lines is disabled, just print file and line
      number.  */
-  if (uiout->test_flags (ui_source_list) && source_open)
+  if (uiout->test_flags (ui_source_list))
     {
       /* Only prints "No such file or directory" once.  */
       if (s == last_source_visited)
@@ -1630,9 +1574,6 @@ search_command_helper (const char *regex, int from_tty, bool forward)
     = get_source_location (current_program_space);
   if (loc->symtab () == nullptr)
     select_source_symtab (0);
-
-  if (!source_open)
-    error (_("source code access disabled"));
 
   scoped_fd desc (open_source_file (loc->symtab ()));
   if (desc.get () < 0)
@@ -1958,22 +1899,6 @@ source_lines_range::source_lines_range (int startline,
     }
 }
 
-/* Handle the "set source" base command.  */
-
-static void
-set_source (const char *arg, int from_tty)
-{
-  help_list (setsourcelist, "set source ", all_commands, gdb_stdout);
-}
-
-/* Handle the "show source" base command.  */
-
-static void
-show_source (const char *args, int from_tty)
-{
-  help_list (showsourcelist, "show source ", all_commands, gdb_stdout);
-}
-
 
 void _initialize_source ();
 void
@@ -2097,25 +2022,4 @@ By default, relative filenames are displayed."),
 			show_filename_display_string,
 			&setlist, &showlist);
 
-  add_prefix_cmd ("source", no_class, set_source,
-                  _("Generic command for setting how sources are handled."),
-                  &setsourcelist, 0, &setlist);
-
-  add_prefix_cmd ("source", no_class, show_source,
-                  _("Generic command for showing source settings."),
-                  &showsourcelist, 0, &showlist);
-
-  add_setshow_boolean_cmd ("open", class_files, &source_open, _("\
-Set whether GDB should open source files."), _("\
-Show whether GDB should open source files."), _("\
-When this option is on GDB will open source files and display the\n\
-contents when appropriate, for example, when GDB stops, or the list\n\
-command is used.\n\
-When this option is off GDB will not try to open source files, instead\n\
-GDB will print the file and line number that would have been displayed.\n\
-This can be useful if access to source code files is slow, for example\n\
-due to the source being located over a slow network connection."),
-                           NULL,
-                           show_source_open,
-                           &setsourcelist, &showsourcelist);
 }

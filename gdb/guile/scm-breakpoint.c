@@ -69,9 +69,6 @@ typedef struct gdbscm_breakpoint_object
 
     /* Non-zero if the breakpoint is an "internal" breakpoint.  */
     int is_internal;
-
-    /* Non-zero if the breakpoint is temporary.  */
-    int is_temporary;
   } spec;
 
   /* The breakpoint number according to gdb.
@@ -106,7 +103,6 @@ static SCM pending_breakpoint_scm = SCM_BOOL_F;
 static SCM type_keyword;
 static SCM wp_class_keyword;
 static SCM internal_keyword;
-static SCM temporary_keyword;
 
 /* Administrivia for breakpoint smobs.  */
 
@@ -336,7 +332,7 @@ bpscm_get_valid_breakpoint_smob_arg_unsafe (SCM self, int arg_pos,
 /* Breakpoint methods.  */
 
 /* (make-breakpoint string [#:type integer] [#:wp-class integer]
-    [#:internal boolean] [#:temporary boolean]) -> <gdb:breakpoint>
+    [#:internal boolean) -> <gdb:breakpoint>
 
    The result is the <gdb:breakpoint> Scheme object.
    The breakpoint is not available to be used yet, however.
@@ -346,26 +342,22 @@ static SCM
 gdbscm_make_breakpoint (SCM location_scm, SCM rest)
 {
   const SCM keywords[] = {
-    type_keyword, wp_class_keyword, internal_keyword,
-    temporary_keyword, SCM_BOOL_F
+    type_keyword, wp_class_keyword, internal_keyword, SCM_BOOL_F
   };
   char *s;
   char *location;
-  int type_arg_pos = -1, access_type_arg_pos = -1,
-      internal_arg_pos = -1, temporary_arg_pos = -1;
+  int type_arg_pos = -1, access_type_arg_pos = -1, internal_arg_pos = -1;
   enum bptype type = bp_breakpoint;
   enum target_hw_bp_type access_type = hw_write;
   int internal = 0;
-  int temporary = 0;
   SCM result;
   breakpoint_smob *bp_smob;
 
-  gdbscm_parse_function_args (FUNC_NAME, SCM_ARG1, keywords, "s#iitt",
+  gdbscm_parse_function_args (FUNC_NAME, SCM_ARG1, keywords, "s#iit",
 			      location_scm, &location, rest,
 			      &type_arg_pos, &type,
 			      &access_type_arg_pos, &access_type,
-			      &internal_arg_pos, &internal,
-			      &temporary_arg_pos, &temporary);
+			      &internal_arg_pos, &internal);
 
   result = bpscm_make_breakpoint_smob ();
   bp_smob = (breakpoint_smob *) SCM_SMOB_DATA (result);
@@ -420,7 +412,6 @@ gdbscm_make_breakpoint (SCM location_scm, SCM rest)
   bp_smob->spec.type = type;
   bp_smob->spec.access_type = access_type;
   bp_smob->spec.is_internal = internal;
-  bp_smob->spec.is_temporary = temporary;
 
   return result;
 }
@@ -456,7 +447,6 @@ gdbscm_register_breakpoint_x (SCM self)
   try
     {
       int internal = bp_smob->spec.is_internal;
-      int temporary = bp_smob->spec.is_temporary;
 
       switch (bp_smob->spec.type)
 	{
@@ -467,7 +457,7 @@ gdbscm_register_breakpoint_x (SCM self)
 	    create_breakpoint (get_current_arch (),
 			       eloc.get (), NULL, -1, NULL, false,
 			       0,
-			       temporary, bp_breakpoint,
+			       0, bp_breakpoint,
 			       0,
 			       AUTO_BOOLEAN_TRUE,
 			       ops,
@@ -1050,18 +1040,6 @@ gdbscm_breakpoint_number (SCM self)
 
   return scm_from_long (bp_smob->number);
 }
-
-/* (breakpoint-temporary? <gdb:breakpoint>) -> boolean */
-
-static SCM
-gdbscm_breakpoint_temporary (SCM self)
-{
-  breakpoint_smob *bp_smob
-    = bpscm_get_valid_breakpoint_smob_arg_unsafe (self, SCM_ARG1, FUNC_NAME);
-
-  return scm_from_bool (bp_smob->bp->disposition == disp_del
-			|| bp_smob->bp->disposition == disp_del_at_next_stop);
-}
 
 /* Return TRUE if "stop" has been set for this breakpoint.
 
@@ -1193,9 +1171,9 @@ static const scheme_function breakpoint_functions[] =
 Create a GDB breakpoint object.\n\
 \n\
   Arguments:\n\
-    location [#:type <type>] [#:wp-class <wp-class>] [#:internal <bool>] [#:temporary <bool>]\n\
+    location [#:type <type>] [#:wp-class <wp-class>] [#:internal <bool>]\n\
   Returns:\n\
-    <gdb:breakpoint> object" },
+    <gdb:breakpoint object" },
 
   { "register-breakpoint!", 1, 0, 0,
     as_a_scm_t_subr (gdbscm_register_breakpoint_x),
@@ -1223,10 +1201,6 @@ Return #t if the breakpoint has not been deleted from GDB." },
   { "breakpoint-number", 1, 0, 0, as_a_scm_t_subr (gdbscm_breakpoint_number),
     "\
 Return the breakpoint's number." },
-
-  { "breakpoint-temporary?", 1, 0, 0, as_a_scm_t_subr (gdbscm_breakpoint_temporary),
-    "\
-Return #t if the breakpoint is a temporary breakpoint." },
 
   { "breakpoint-type", 1, 0, 0, as_a_scm_t_subr (gdbscm_breakpoint_type),
     "\
@@ -1371,5 +1345,4 @@ gdbscm_initialize_breakpoints (void)
   type_keyword = scm_from_latin1_keyword ("type");
   wp_class_keyword = scm_from_latin1_keyword ("wp-class");
   internal_keyword = scm_from_latin1_keyword ("internal");
-  temporary_keyword = scm_from_latin1_keyword ("temporary");
 }

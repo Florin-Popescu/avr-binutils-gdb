@@ -37,10 +37,6 @@ struct selftest
   virtual void operator() () const = 0;
 };
 
-/* True if selftest should run verbosely.  */
-
-extern bool run_verbose ();
-
 /* Register a new self-test.  */
 
 extern void register_test (const std::string &name, selftest *test);
@@ -48,7 +44,7 @@ extern void register_test (const std::string &name, selftest *test);
 /* Register a new self-test.  */
 
 extern void register_test (const std::string &name,
-			   std::function<void(void)> function);
+			   self_test_function *function);
 
 /* Run all the self tests.  This print a message describing the number
    of test and the number of failures.
@@ -56,8 +52,7 @@ extern void register_test (const std::string &name,
    If FILTERS is not empty, only run tests with names containing one of the
    element of FILTERS.  */
 
-extern void run_tests (gdb::array_view<const char *const> filters,
-		       bool verbose = false);
+extern void run_tests (gdb::array_view<const char *const> filters);
 
 /* Reset GDB or GDBserver's internal state.  */
 extern void reset ();

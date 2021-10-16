@@ -1440,27 +1440,25 @@ static int
 adjust_eh_frame_local_symbols (const asection *sec,
 			       struct elf_reloc_cookie *cookie)
 {
+  unsigned int shndx;
+  Elf_Internal_Sym *sym;
+  Elf_Internal_Sym *end_sym;
   int adjusted = 0;
 
-  if (cookie->locsymcount > 1)
-    {
-      unsigned int shndx = elf_section_data (sec)->this_idx;
-      Elf_Internal_Sym *end_sym = cookie->locsyms + cookie->locsymcount;
-      Elf_Internal_Sym *sym;
+  shndx = elf_section_data (sec)->this_idx;
+  end_sym = cookie->locsyms + cookie->locsymcount;
+  for (sym = cookie->locsyms + 1; sym < end_sym; ++sym)
+    if (sym->st_info <= ELF_ST_INFO (STB_LOCAL, STT_OBJECT)
+	&& sym->st_shndx == shndx)
+      {
+	bfd_signed_vma delta = offset_adjust (sym->st_value, sec);
 
-      for (sym = cookie->locsyms + 1; sym < end_sym; ++sym)
-	if (sym->st_info <= ELF_ST_INFO (STB_LOCAL, STT_OBJECT)
-	    && sym->st_shndx == shndx)
+	if (delta != 0)
 	  {
-	    bfd_signed_vma delta = offset_adjust (sym->st_value, sec);
-
-	    if (delta != 0)
-	      {
-		adjusted = 1;
-		sym->st_value += delta;
-	      }
+	    adjusted = 1;
+	    sym->st_value += delta;
 	  }
-    }
+      }
   return adjusted;
 }
 

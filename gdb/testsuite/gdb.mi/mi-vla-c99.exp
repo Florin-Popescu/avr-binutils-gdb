@@ -30,7 +30,7 @@ standard_testfile vla.c
 
 if { [gdb_compile "${srcdir}/${subdir}/${srcfile}" \
                   "${binfile}" executable {debug}] != "" } {
-     untested "failed to compile"
+     untested mi-vla-basics.exp
      return -1
 }
 

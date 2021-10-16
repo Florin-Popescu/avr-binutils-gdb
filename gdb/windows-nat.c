@@ -277,7 +277,7 @@ struct windows_nat_target final : public x86_nat_target<inf_child_target>
 
   char *pid_to_exec_file (int pid) override;
 
-  ptid_t get_ada_task_ptid (long lwp, ULONGEST thread) override;
+  ptid_t get_ada_task_ptid (long lwp, long thread) override;
 
   bool get_tib_address (ptid_t ptid, CORE_ADDR *addr) override;
 
@@ -1492,7 +1492,7 @@ windows_nat_target::get_windows_debug_event (int pid,
 
       ptid_t ptid (current_event.dwProcessId, thread_id);
       windows_thread_info *th = thread_rec (ptid, INVALIDATE_CONTEXT);
-      th->reload_context = true;
+      th->reload_context = 1;
 
       return thread_id;
     }
@@ -2553,16 +2553,14 @@ windows_nat_target::create_inferior (const char *exec_file,
   PROCESS_INFORMATION pi;
   BOOL ret;
   DWORD flags = 0;
-  const std::string &inferior_tty = current_inferior ()->tty ();
+  const char *inferior_tty = current_inferior ()->tty ();
 
   if (!exec_file)
     error (_("No executable specified, use `target exec'."));
 
-  const char *inferior_cwd = current_inferior ()->cwd ().c_str ();
+  const char *inferior_cwd = get_inferior_cwd ();
   std::string expanded_infcwd;
-  if (*inferior_cwd == '\0')
-    inferior_cwd = nullptr;
-  else
+  if (inferior_cwd != NULL)
     {
       expanded_infcwd = gdb_tilde_expand (inferior_cwd);
       /* Mirror slashes on inferior's cwd.  */
@@ -2654,14 +2652,14 @@ windows_nat_target::create_inferior (const char *exec_file,
       w32_env = NULL;
     }
 
-  if (inferior_tty.empty ())
+  if (inferior_tty == nullptr)
     tty = ostdin = ostdout = ostderr = -1;
   else
     {
-      tty = open (inferior_tty.c_str (), O_RDWR | O_NOCTTY);
+      tty = open (inferior_tty, O_RDWR | O_NOCTTY);
       if (tty < 0)
 	{
-	  print_sys_errmsg (inferior_tty.c_str (), errno);
+	  print_sys_errmsg (inferior_tty, errno);
 	  ostdin = ostdout = ostderr = -1;
 	}
       else
@@ -2727,18 +2725,18 @@ windows_nat_target::create_inferior (const char *exec_file,
     }
   /* If not all the standard streams are redirected by the command
      line, use INFERIOR_TTY for those which aren't.  */
-  if (!inferior_tty.empty ()
+  if (inferior_tty != nullptr
       && !(fd_inp >= 0 && fd_out >= 0 && fd_err >= 0))
     {
       SECURITY_ATTRIBUTES sa;
       sa.nLength = sizeof(sa);
       sa.lpSecurityDescriptor = 0;
       sa.bInheritHandle = TRUE;
-      tty = CreateFileA (inferior_tty.c_str (), GENERIC_READ | GENERIC_WRITE,
+      tty = CreateFileA (inferior_tty, GENERIC_READ | GENERIC_WRITE,
 			 0, &sa, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, 0);
       if (tty == INVALID_HANDLE_VALUE)
 	warning (_("Warning: Failed to open TTY %s, error %#x."),
-		 inferior_tty.c_str (), (unsigned) GetLastError ());
+		 inferior_tty, (unsigned) GetLastError ());
     }
   if (redirected || tty != INVALID_HANDLE_VALUE)
     {
@@ -3082,7 +3080,7 @@ windows_nat_target::get_tib_address (ptid_t ptid, CORE_ADDR *addr)
 }
 
 ptid_t
-windows_nat_target::get_ada_task_ptid (long lwp, ULONGEST thread)
+windows_nat_target::get_ada_task_ptid (long lwp, long thread)
 {
   return ptid_t (inferior_ptid.pid (), lwp, 0);
 }

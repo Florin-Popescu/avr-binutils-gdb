@@ -204,13 +204,11 @@ public:
 #define SWITCH_THRU_ALL_UIS()		\
   for (switch_thru_all_uis stau_state; !stau_state.done (); stau_state.next ())
 
-using ui_range = next_range<ui>;
-
 /* An adapter that can be used to traverse over all UIs.  */
 static inline
-ui_range all_uis ()
+next_adapter<ui> all_uis ()
 {
-  return ui_range (ui_list);
+  return next_adapter<ui> (ui_list);
 }
 
 /* Register the UI's input file descriptor in the event loop.  */
@@ -261,7 +259,7 @@ extern scoped_value_mark prepare_execute_command (void);
 
 /* This function returns a pointer to the string that is used
    by gdb for its command prompt.  */
-extern const std::string &get_prompt ();
+extern char *get_prompt (void);
 
 /* This function returns a pointer to the string that is used
    by gdb for its command prompt.  */

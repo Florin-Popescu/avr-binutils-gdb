@@ -74,6 +74,7 @@ proc run_trace_experiment { } {
 }
 
 if { ![runto_main] } {
+    fail "can't run to main to check for trace support"
     return -1
 }
 
@@ -209,6 +210,7 @@ with_test_prefix "normal buffer" {
     clean_restart $testfile
 
     if { ![runto_main] } {
+	fail "can't run to main"
 	return 1
     }
 
@@ -232,6 +234,7 @@ with_test_prefix "small buffer" {
     clean_restart $testfile
 
     if { ![runto_main] } {
+	fail "can't run to main"
 	return 1
     }
 
@@ -257,6 +260,7 @@ with_test_prefix "circular buffer" {
     clean_restart $testfile
 
     if { ![runto_main] } {
+	fail "can't run to main"
 	return 1
     }
 

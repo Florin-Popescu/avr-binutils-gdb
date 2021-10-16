@@ -1669,10 +1669,6 @@ _bfd_xcoff_read_ar_hdr (bfd *abfd)
       ret->filename = (char *) hdrp + SIZEOF_AR_HDR_BIG;
     }
 
-  /* Size occupied by the header above that covered in the fixed
-     SIZEOF_AR_HDR or SIZEOF_AR_HDR_BIG.  */
-  ret->extra_size = namlen + (namlen & 1) + SXCOFFARFMAG;
-
   /* Skip over the XCOFFARFMAG at the end of the file name.  */
   if (bfd_seek (abfd, (file_ptr) ((namlen & 1) + SXCOFFARFMAG), SEEK_CUR) != 0)
     return NULL;
@@ -1686,7 +1682,6 @@ bfd *
 _bfd_xcoff_openr_next_archived_file (bfd *archive, bfd *last_file)
 {
   file_ptr filestart;
-  file_ptr laststart, lastend;
 
   if (xcoff_ardata (archive) == NULL)
     {
@@ -1697,27 +1692,9 @@ _bfd_xcoff_openr_next_archived_file (bfd *archive, bfd *last_file)
   if (! xcoff_big_format_p (archive))
     {
       if (last_file == NULL)
-	{
-	  filestart = bfd_ardata (archive)->first_file_filepos;
-	  laststart = 0;
-	  lastend = SIZEOF_AR_FILE_HDR;
-	}
+	filestart = bfd_ardata (archive)->first_file_filepos;
       else
-	{
-	  struct areltdata *arel = arch_eltdata (last_file);
-
-	  GET_VALUE_IN_FIELD (filestart, arch_xhdr (last_file)->nextoff, 10);
-	  laststart = last_file->proxy_origin;
-	  lastend = laststart + arel->parsed_size;
-	  laststart -= SIZEOF_AR_HDR + arel->extra_size;
-	}
-
-      /* Sanity check that we aren't pointing into the previous element.  */
-      if (filestart != 0 && filestart >= laststart && filestart < lastend)
-	{
-	  bfd_set_error (bfd_error_malformed_archive);
-	  return NULL;
-	}
+	GET_VALUE_IN_FIELD (filestart, arch_xhdr (last_file)->nextoff, 10);
 
       if (filestart == 0
 	  || EQ_VALUE_IN_FIELD (filestart, xcoff_ardata (archive)->memoff, 10)
@@ -1730,27 +1707,9 @@ _bfd_xcoff_openr_next_archived_file (bfd *archive, bfd *last_file)
   else
     {
       if (last_file == NULL)
-	{
-	  filestart = bfd_ardata (archive)->first_file_filepos;
-	  laststart = 0;
-	  lastend = SIZEOF_AR_FILE_HDR_BIG;
-	}
+	filestart = bfd_ardata (archive)->first_file_filepos;
       else
-	{
-	  struct areltdata *arel = arch_eltdata (last_file);
-
-	  GET_VALUE_IN_FIELD (filestart, arch_xhdr_big (last_file)->nextoff, 10);
-	  laststart = last_file->proxy_origin;
-	  lastend = laststart + arel->parsed_size;
-	  laststart -= SIZEOF_AR_HDR_BIG + arel->extra_size;
-	}
-
-      /* Sanity check that we aren't pointing into the previous element.  */
-      if (filestart != 0 && filestart >= laststart && filestart < lastend)
-	{
-	  bfd_set_error (bfd_error_malformed_archive);
-	  return NULL;
-	}
+	GET_VALUE_IN_FIELD (filestart, arch_xhdr_big (last_file)->nextoff, 10);
 
       if (filestart == 0
 	  || EQ_VALUE_IN_FIELD (filestart, xcoff_ardata_big (archive)->memoff, 10)
@@ -3246,12 +3205,10 @@ xcoff_reloc_type_tls (bfd *input_bfd ATTRIBUTE_UNUSED,
   /* FIXME: h is sometimes null, if the TLS symbol is not exported.  */
   if (!h)
     {
-      char vaddr_buf[128];
-
-      sprintf_vma (vaddr_buf, rel->r_vaddr);
       _bfd_error_handler
-	(_("%pB: TLS relocation at 0x%s over internal symbols (C_HIDEXT) not yet possible\n"),
-	 input_bfd, vaddr_buf);
+	(_("%pB: TLS relocation at (0x%" BFD_VMA_FMT "x) over "
+	   "internal symbols (C_HIDEXT) not yet possible\n"),
+	 input_bfd, rel->r_vaddr);
       return false;
     }
 
@@ -3259,12 +3216,10 @@ xcoff_reloc_type_tls (bfd *input_bfd ATTRIBUTE_UNUSED,
   /* TLS relocations must target a TLS symbol.  */
   if (h->smclas != XMC_TL && h->smclas != XMC_UL)
     {
-      char vaddr_buf[128];
-
-      sprintf_vma (vaddr_buf, rel->r_vaddr);
       _bfd_error_handler
-	(_("%pB: TLS relocation at 0x%s over non-TLS symbol %s (0x%x)\n"),
-	 input_bfd, vaddr_buf, h->root.root.string, h->smclas);
+	(_("%pB: TLS relocation at (0x%" BFD_VMA_FMT "x) over "
+	   "non-TLS symbol %s (0x%x)\n"),
+	 input_bfd, rel->r_vaddr, h->root.root.string, h->smclas);
       return false;
     }
 
@@ -3275,12 +3230,10 @@ xcoff_reloc_type_tls (bfd *input_bfd ATTRIBUTE_UNUSED,
        && (h->flags & XCOFF_DEF_DYNAMIC) != 0)
 	  || (h->flags & XCOFF_IMPORT) != 0))
     {
-      char vaddr_buf[128];
-
-      sprintf_vma (vaddr_buf, rel->r_vaddr);
       _bfd_error_handler
-	(_("%pB: TLS local relocation at 0x%s over imported symbol %s\n"),
-	 input_bfd, vaddr_buf, h->root.root.string);
+	(_("%pB: TLS local relocation at (0x%" BFD_VMA_FMT "x) over "
+	   "imported symbol %s\n"),
+	 input_bfd, rel->r_vaddr, h->root.root.string);
       return false;
     }
 
@@ -3685,15 +3638,11 @@ xcoff_ppc_relocate_section (bfd *output_bfd,
 	      break;
 
 	    default:
-	      {
-		char vaddr_buf[128];
-
-		sprintf_vma (vaddr_buf, rel->r_vaddr);
-		_bfd_error_handler
-		  (_("%pB: relocation (%d) at 0x%s has wrong r_rsize (0x%x)\n"),
-		   input_bfd, rel->r_type, vaddr_buf, rel->r_size);
-		return false;
-	      }
+	      _bfd_error_handler
+		(_("%pB: relocatation (%d) at (0x%" BFD_VMA_FMT "x) has wrong"
+		   " r_rsize (0x%x)\n"),
+		 input_bfd, rel->r_type, rel->r_vaddr, rel->r_size);
+	      return false;
 	    }
 	}
 
@@ -4306,22 +4255,20 @@ static const unsigned long xcoff_glink_code[9] =
     0x00000000,	/* traceback table */
   };
 
-/* Table to convert DWARF flags to section names.
-   Remember to update binutils/dwarf.c:debug_displays
-   if new DWARF sections are supported by XCOFF.  */
+/* Table to convert DWARF flags to section names.  */
 
 const struct xcoff_dwsect_name xcoff_dwsect_names[] = {
-  { SSUBTYP_DWINFO,  ".dwinfo",  ".debug_info",     true },
-  { SSUBTYP_DWLINE,  ".dwline",  ".debug_line",     true },
-  { SSUBTYP_DWPBNMS, ".dwpbnms", ".debug_pubnames", true },
-  { SSUBTYP_DWPBTYP, ".dwpbtyp", ".debug_pubtypes", true },
-  { SSUBTYP_DWARNGE, ".dwarnge", ".debug_aranges",  true },
-  { SSUBTYP_DWABREV, ".dwabrev", ".debug_abbrev",   false },
-  { SSUBTYP_DWSTR,   ".dwstr",   ".debug_str",      true },
-  { SSUBTYP_DWRNGES, ".dwrnges", ".debug_ranges",   true },
-  { SSUBTYP_DWLOC,   ".dwloc",   ".debug_loc",      true },
-  { SSUBTYP_DWFRAME, ".dwframe", ".debug_frame",    true },
-  { SSUBTYP_DWMAC,   ".dwmac",   ".debug_macro",    true }
+  { SSUBTYP_DWINFO,  ".dwinfo",   true },
+  { SSUBTYP_DWLINE,  ".dwline",   true },
+  { SSUBTYP_DWPBNMS, ".dwpbnms",  true },
+  { SSUBTYP_DWPBTYP, ".dwpbtyp",  true },
+  { SSUBTYP_DWARNGE, ".dwarnge",  true },
+  { SSUBTYP_DWABREV, ".dwabrev",  false },
+  { SSUBTYP_DWSTR,   ".dwstr",    true },
+  { SSUBTYP_DWRNGES, ".dwrnges",  true },
+  { SSUBTYP_DWLOC,   ".dwloc",    true },
+  { SSUBTYP_DWFRAME, ".dwframe",  true },
+  { SSUBTYP_DWMAC,   ".dwmac",    true }
 };
 
 /* For generic entry points.  */

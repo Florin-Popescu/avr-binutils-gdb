@@ -40,6 +40,7 @@ if [prepare_for_testing "failed to prepare" $testfile {} {debug}] {
 }
 
 if { ![runto_main] } then {
+    fail "run to main"
     return
 }
 

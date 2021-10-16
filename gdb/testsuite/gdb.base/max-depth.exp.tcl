@@ -36,6 +36,7 @@ proc compile_and_run_tests { lang } {
 
     # Advance to main.
     if { ![runto_main] } then {
+	fail "can't run to main"
 	return 0
     }
 

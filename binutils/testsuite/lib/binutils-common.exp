@@ -54,12 +54,7 @@ proc is_elf_format {} {
 	 && ![istarget *-*-wasm32*]
 	 && ![istarget avr-*-*]
 	 && ![istarget hppa*64*-*-hpux*]
-	 && ![istarget i?86-*-beos*]
 	 && ![istarget ia64-*-hpux*] } {
-	return 0
-    }
-
-    if { [istarget i?86-*-beospe*] } {
 	return 0
     }
 
@@ -68,7 +63,9 @@ proc is_elf_format {} {
 	return 0
     }
 
-    if { [istarget *-*-netbsdaout*] } {
+    if { ![istarget *-*-netbsdelf*]
+	 && (   [istarget vax-*-netbsd*]
+	     || [istarget ns32k-*-netbsd*]) } {
 	return 0
     }
 
@@ -88,7 +85,8 @@ proc is_aout_format {} {
 	 || [istarget *-*-bsd*]
 	 || [istarget *-*-msdos*]
 	 || [istarget ns32k-*-*]
-	 || [istarget pdp11-*-*] } {
+	 || [istarget pdp11-*-*]
+	 || [istarget vax-*-netbsd] } {
 	return 1
     }
     return 0
@@ -107,6 +105,7 @@ proc is_pecoff_format args {
 	 || [istarget $m_os-cygwin*]
 	 || [istarget $m_os-interix*]
 	 || [istarget $m_os-mingw*]
+	 || [istarget $m_os-netbsdpe*]
 	 || [istarget $m_os-pe*]
 	 || [istarget $m_os-winnt*] } {
 	return 1
@@ -181,18 +180,6 @@ proc is_rela { binary_file } {
     }
 
     return 1
-}
-
-# Return the file name suffix required for executables, if any.
-#
-proc exeext {} {
-    if { [istarget *-*-cygwin*]
-	 || [istarget *-*-mingw*]
-	 || [istarget *-*-msdos*]
-	 || [istarget *-*-*vms*] } {
-	return ".exe"
-    }
-    return ""
 }
 
 # True if the target matches TARGET, specified as a TCL procedure if
@@ -851,9 +838,9 @@ if ![string length [info proc prune_warnings]] {
 # regexps in FILE.d.
 #
 proc run_dump_test { name {extra_options {}} } {
-    global ADDR2LINE ADDR2LINEFLAGS AS ASFLAGS CC_FOR_TARGET CFLAGS_FOR_TARGET
-    global ELFEDIT ELFEDITFLAGS LD LDFLAGS NM NMFLAGS OBJCOPY OBJCOPYFLAGS
-    global OBJDUMP OBJDUMPFLAGS READELF READELFFLAGS STRIP STRIPFLAGS
+    global ADDR2LINE ADDR2LINEFLAGS AS ASFLAGS CC CFLAGS ELFEDIT ELFEDITFLAGS
+    global LD LDFLAGS NM NMFLAGS OBJCOPY OBJCOPYFLAGS OBJDUMP OBJDUMPFLAGS
+    global READELF READELFFLAGS STRIP STRIPFLAGS
     global copyfile env runtests srcdir subdir verbose
 
     if [string match "*/*" $name] {
@@ -1159,7 +1146,7 @@ proc run_dump_test { name {extra_options {}} } {
 	    # ofile is never absolute, so this always works to protect sfile
 	    # from later absolutization.
 	    set sfile "./[file rootname $ofile].s"
-	    set cmd "$CC_FOR_TARGET $CFLAGS_FOR_TARGET -S $opts(cc) -o $sfile $cfile"
+	    set cmd "$CC $CFLAGS -S $opts(cc) -o $sfile $cfile"
 	    send_log "$cmd\n"
 	    set cmdret [remote_exec host [concat sh -c [list "$cmd 2>&1"]] "" "/dev/null" "dump.tmp"]
 	    remote_upload host "dump.tmp"

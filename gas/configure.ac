@@ -727,7 +727,14 @@ AC_DEFINE_UNQUOTED(DEFAULT_X86_USED_NOTE,
    properties by default.])
 
 if test ${ac_default_generate_riscv_attr} = unset; then
-  ac_default_generate_riscv_attr=1
+    case ${target_os} in
+      elf)
+	ac_default_generate_riscv_attr=1
+	;;
+      *)
+	ac_default_generate_riscv_attr=0
+	;;
+  esac
 fi
 
 AC_DEFINE_UNQUOTED(DEFAULT_RISCV_ATTR,

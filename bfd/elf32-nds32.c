@@ -1954,8 +1954,6 @@ static reloc_howto_type nds32_elf_howto_table[] =
 	 0xffffffff,		/* dst_mask  */
 	 false),		/* pcrel_offset  */
 
-  EMPTY_HOWTO (114),
-
   HOWTO2 (R_NDS32_TLS_IE_LO12,	/* type  */
 	 0,			/* rightshift  */
 	 2,			/* size (0 = byte, 1 = short, 2 = long)  */
@@ -3186,19 +3184,26 @@ bfd_elf32_bfd_reloc_name_lookup (bfd *abfd ATTRIBUTE_UNUSED,
 }
 
 static reloc_howto_type *
-bfd_elf32_bfd_reloc_type_table_lookup (unsigned int code)
+bfd_elf32_bfd_reloc_type_table_lookup (enum elf_nds32_reloc_type code)
 {
   if (code < R_NDS32_RELAX_ENTRY)
     {
-      if (code < ARRAY_SIZE (nds32_elf_howto_table))
-	return &nds32_elf_howto_table[code];
+      BFD_ASSERT (code < ARRAY_SIZE (nds32_elf_howto_table));
+      return &nds32_elf_howto_table[code];
     }
   else
     {
-      if (code - R_NDS32_RELAX_ENTRY < ARRAY_SIZE (nds32_elf_relax_howto_table))
-	return &nds32_elf_relax_howto_table[code - R_NDS32_RELAX_ENTRY];
+      if ((size_t) (code - R_NDS32_RELAX_ENTRY)
+	  >= ARRAY_SIZE (nds32_elf_relax_howto_table))
+	{
+	  int i = code;
+	  i += 1;
+	}
+
+      BFD_ASSERT ((size_t) (code - R_NDS32_RELAX_ENTRY)
+		  < ARRAY_SIZE (nds32_elf_relax_howto_table));
+      return &nds32_elf_relax_howto_table[code - R_NDS32_RELAX_ENTRY];
     }
-  return NULL;
 }
 
 static reloc_howto_type *
@@ -3223,12 +3228,10 @@ static bool
 nds32_info_to_howto_rel (bfd *abfd, arelent *cache_ptr,
 			 Elf_Internal_Rela *dst)
 {
-  unsigned int r_type = ELF32_R_TYPE (dst->r_info);
+  enum elf_nds32_reloc_type r_type;
 
-  cache_ptr->howto = NULL;
-  if (r_type <= R_NDS32_GNU_VTENTRY)
-    cache_ptr->howto = bfd_elf32_bfd_reloc_type_table_lookup (r_type);
-  if (cache_ptr->howto == NULL || cache_ptr->howto->name == NULL)
+  r_type = ELF32_R_TYPE (dst->r_info);
+  if (r_type > R_NDS32_GNU_VTENTRY)
     {
       /* xgettext:c-format */
       _bfd_error_handler (_("%pB: unsupported relocation type %#x"),
@@ -3236,28 +3239,30 @@ nds32_info_to_howto_rel (bfd *abfd, arelent *cache_ptr,
       bfd_set_error (bfd_error_bad_value);
       return false;
     }
+
+  BFD_ASSERT (ELF32_R_TYPE (dst->r_info) <= R_NDS32_GNU_VTENTRY);
+  cache_ptr->howto = bfd_elf32_bfd_reloc_type_table_lookup (r_type);
   return true;
 }
 
 static bool
-nds32_info_to_howto (bfd *abfd, arelent *cache_ptr,
+nds32_info_to_howto (bfd *abfd ATTRIBUTE_UNUSED, arelent *cache_ptr,
 		     Elf_Internal_Rela *dst)
 {
   unsigned int r_type = ELF32_R_TYPE (dst->r_info);
 
-  cache_ptr->howto = NULL;
-  if (r_type == R_NDS32_NONE
-      || r_type > R_NDS32_GNU_VTENTRY)
-    cache_ptr->howto = bfd_elf32_bfd_reloc_type_table_lookup (r_type);
-  if (cache_ptr->howto == NULL || cache_ptr->howto->name == NULL)
+  if ((r_type == R_NDS32_NONE)
+      || ((r_type > R_NDS32_GNU_VTENTRY)
+	  && (r_type < R_NDS32_max)))
     {
-      /* xgettext:c-format */
-      _bfd_error_handler (_("%pB: unsupported relocation type %#x"),
-			  abfd, r_type);
-      bfd_set_error (bfd_error_bad_value);
-      return false;
+      cache_ptr->howto = bfd_elf32_bfd_reloc_type_table_lookup (r_type);
+      return true;
     }
-  return true;
+
+  /* xgettext:c-format */
+  _bfd_error_handler (_("%pB: unsupported relocation type %#x"), abfd, r_type);
+  bfd_set_error (bfd_error_bad_value);
+  return false;
 }
 
 /* Support for core dump NOTE sections.

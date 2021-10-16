@@ -570,7 +570,8 @@ md_apply_fix (fixS *fixP ATTRIBUTE_UNUSED,
              fixP->fx_r_type = BFD_RELOC_FT32_DIFF32;
              break;
            default:
-             as_bad_subtract (fixP);
+             as_bad_where (fixP->fx_file, fixP->fx_line,
+                           _("expression too complex"));
              break;
          }
 
@@ -583,7 +584,7 @@ md_apply_fix (fixS *fixP ATTRIBUTE_UNUSED,
 
   /* We don't actually support subtracting a symbol.  */
   if (fixP->fx_subsy != (symbolS *) NULL)
-    as_bad_subtract (fixP);
+    as_bad_where (fixP->fx_file, fixP->fx_line, _("expression too complex"));
 
   switch (fixP->fx_r_type)
     {

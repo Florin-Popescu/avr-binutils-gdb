@@ -69,6 +69,7 @@ proc test {debug} {
     test_break "before run"
 
     if ![runto_main] {
+	fail "can't run to main"
 	return
     }
 

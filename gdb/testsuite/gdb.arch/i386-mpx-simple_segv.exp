@@ -46,6 +46,7 @@ if { [prepare_for_testing "failed to prepare" ${testfile} ${srcfile} \
 }
 
 if ![runto_main] {
+    untested "could not run to main"
     return -1
 }
 
@@ -63,6 +64,7 @@ set segv_with_exit "Program received signal SIGSEGV,\
 set parameters "print pass stop"
 with_test_prefix "$parameters" {
     if ![runto_main] {
+        fail "could not run to main"
         return -1
     }
 
@@ -82,6 +84,7 @@ with_test_prefix "$parameters" {
 set parameters "print pass nostop"
 with_test_prefix "$parameters" {
     if ![runto_main] {
+        fail "could not run to main"
         return -1
     }
 
@@ -100,6 +103,7 @@ with_test_prefix "$parameters" {
 set parameters "print nopass stop"
 with_test_prefix "$parameters" {
     if ![runto_main] {
+        fail "could not run to main"
         return -1
     }
 
@@ -119,6 +123,7 @@ with_test_prefix "$parameters" {
 set parameters "noprint pass nostop"
 with_test_prefix "$parameters" {
     if ![runto_main] {
+        fail "could not run to main"
         return -1
     }
 

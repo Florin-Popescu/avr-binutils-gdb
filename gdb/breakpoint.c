@@ -276,7 +276,7 @@ static const char *dprintf_style = dprintf_style_gdb;
    copied into the command, so it can be anything that GDB can
    evaluate to a callable address, not necessarily a function name.  */
 
-static std::string dprintf_function = "printf";
+static char *dprintf_function;
 
 /* The channel to use for dynamic printf if the preferred style is to
    call into the inferior; if a nonempty string, it will be passed to
@@ -286,7 +286,7 @@ static std::string dprintf_function = "printf";
    "stderr", this could be an app-specific expression like
    "mystreams[curlogger]".  */
 
-static std::string dprintf_channel;
+static char *dprintf_channel;
 
 /* True if dprintf commands should continue to operate even if GDB
    has disconnected.  */
@@ -407,7 +407,8 @@ breakpoints_should_be_inserted_now (void)
       /* Don't remove breakpoints yet if, even though all threads are
 	 stopped, we still have events to process.  */
       for (thread_info *tp : all_non_exited_threads ())
-	if (tp->resumed () && tp->has_pending_waitstatus ())
+	if (tp->resumed
+	    && tp->suspend.waitstatus_pending_p)
 	  return 1;
     }
   return 0;
@@ -626,6 +627,19 @@ static int tracepoint_count;
 static struct cmd_list_element *breakpoint_set_cmdlist;
 static struct cmd_list_element *breakpoint_show_cmdlist;
 struct cmd_list_element *save_cmdlist;
+
+/* See declaration at breakpoint.h.  */
+
+struct breakpoint *
+breakpoint_find_if (int (*func) (struct breakpoint *b, void *d),
+		    void *user_data)
+{
+  for (breakpoint *b : all_breakpoints ())
+    if (func (b, user_data) != 0)
+      return b;
+
+  return nullptr;
+}
 
 /* Return whether a breakpoint is an active enabled breakpoint.  */
 static int
@@ -1661,7 +1675,7 @@ watchpoint_in_thread_scope (struct watchpoint *b)
   return (b->pspace == current_program_space
 	  && (b->watchpoint_thread == null_ptid
 	      || (inferior_ptid == b->watchpoint_thread
-		  && !inferior_thread ()->executing ())));
+		  && !inferior_thread ()->executing)));
 }
 
 /* Set watchpoint B to disp_del_at_next_stop, even including its possible
@@ -4512,7 +4526,7 @@ get_bpstat_thread ()
     return NULL;
 
   thread_info *tp = inferior_thread ();
-  if (tp->state == THREAD_EXITED || tp->executing ())
+  if (tp->state == THREAD_EXITED || tp->executing)
     return NULL;
   return tp;
 }
@@ -4565,12 +4579,13 @@ maybe_print_thread_hit_breakpoint (struct ui_out *uiout)
 
   if (show_thread_that_caused_stop ())
     {
+      const char *name;
       struct thread_info *thr = inferior_thread ();
 
       uiout->text ("Thread ");
       uiout->field_string ("thread-id", print_thread_id (thr));
 
-      const char *name = thread_name (thr);
+      name = thr->name != NULL ? thr->name : target_thread_name (thr);
       if (name != NULL)
 	{
 	  uiout->text (" \"");
@@ -5477,6 +5492,7 @@ bpstat_stop_status (const address_space *aspace,
 	  if (bs->stop)
 	    {
 	      ++(b->hit_count);
+	      gdb::observers::breakpoint_modified.notify (b);
 
 	      /* We will stop here.  */
 	      if (b->disposition == disp_disable)
@@ -5486,7 +5502,6 @@ bpstat_stop_status (const address_space *aspace,
 		    b->enable_state = bp_disabled;
 		  removed_any = 1;
 		}
-	      gdb::observers::breakpoint_modified.notify (b);
 	      if (b->silent)
 		bs->print = 0;
 	      bs->commands = b->commands;
@@ -6658,7 +6673,7 @@ default_collect_info (void)
   /* If it has no value (which is frequently the case), say nothing; a
      message like "No default-collect." gets in user's face when it's
      not wanted.  */
-  if (default_collect.empty ())
+  if (!*default_collect)
     return;
 
   /* The following phrase lines up nicely with per-tracepoint collect
@@ -8759,17 +8774,17 @@ update_dprintf_command_list (struct breakpoint *b)
     printf_line = xstrprintf ("printf %s", dprintf_args);
   else if (strcmp (dprintf_style, dprintf_style_call) == 0)
     {
-      if (dprintf_function.empty ())
+      if (!dprintf_function)
 	error (_("No function supplied for dprintf call"));
 
-      if (!dprintf_channel.empty ())
+      if (dprintf_channel && strlen (dprintf_channel) > 0)
 	printf_line = xstrprintf ("call (void) %s (%s,%s)",
-				  dprintf_function.c_str (),
-				  dprintf_channel.c_str (),
+				  dprintf_function,
+				  dprintf_channel,
 				  dprintf_args);
       else
 	printf_line = xstrprintf ("call (void) %s (%s)",
-				  dprintf_function.c_str (),
+				  dprintf_function,
 				  dprintf_args);
     }
   else if (strcmp (dprintf_style, dprintf_style_agent) == 0)
@@ -12268,9 +12283,9 @@ breakpoint::~breakpoint ()
 
 /* See breakpoint.h.  */
 
-bp_location_range breakpoint::locations ()
+bp_locations_range breakpoint::locations ()
 {
-  return bp_location_range (this->loc);
+  return bp_locations_range (this->loc);
 }
 
 static struct bp_location *
@@ -15102,8 +15117,8 @@ save_breakpoints (const char *filename, int from_tty,
 	}
     }
 
-  if (extra_trace_bits && !default_collect.empty ())
-    fp.printf ("set default-collect %s\n", default_collect.c_str ());
+  if (extra_trace_bits && *default_collect)
+    fp.printf ("set default-collect %s\n", default_collect);
 
   if (from_tty)
     printf_filtered (_("Saved to file '%s'.\n"), expanded_filename.get ());
@@ -15190,7 +15205,7 @@ static struct cmd_list_element *tcatch_cmdlist;
 
 void
 add_catch_command (const char *name, const char *docstring,
-		   cmd_func_ftype *func,
+		   cmd_const_sfunc_ftype *sfunc,
 		   completer_ftype *completer,
 		   void *user_data_catch,
 		   void *user_data_tcatch)
@@ -15199,13 +15214,13 @@ add_catch_command (const char *name, const char *docstring,
 
   command = add_cmd (name, class_breakpoint, docstring,
 		     &catch_cmdlist);
-  command->func = func;
+  set_cmd_sfunc (command, sfunc);
   command->set_context (user_data_catch);
   set_cmd_completer (command, completer);
 
   command = add_cmd (name, class_breakpoint, docstring,
 		     &tcatch_cmdlist);
-  command->func = func;
+  set_cmd_sfunc (command, sfunc);
   command->set_context (user_data_tcatch);
   set_cmd_completer (command, completer);
 }
@@ -16014,6 +16029,7 @@ output stream by setting dprintf-function and dprintf-channel."),
 			update_dprintf_commands, NULL,
 			&setlist, &showlist);
 
+  dprintf_function = xstrdup ("printf");
   add_setshow_string_cmd ("dprintf-function", class_support,
 			  &dprintf_function, _("\
 Set the function to use for dynamic printf."), _("\
@@ -16021,6 +16037,7 @@ Show the function to use for dynamic printf."), NULL,
 			  update_dprintf_commands, NULL,
 			  &setlist, &showlist);
 
+  dprintf_channel = xstrdup ("");
   add_setshow_string_cmd ("dprintf-channel", class_support,
 			  &dprintf_channel, _("\
 Set the channel to use for dynamic printf."), _("\

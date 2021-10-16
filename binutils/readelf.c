@@ -4095,16 +4095,6 @@ get_tic6x_segment_type (unsigned long type)
 }
 
 static const char *
-get_riscv_segment_type (unsigned long type)
-{
-  switch (type)
-    {
-    case PT_RISCV_ATTRIBUTES: return "RISCV_ATTRIBUTES";
-    default:                  return NULL;
-    }
-}
-
-static const char *
 get_hpux_segment_type (unsigned long type, unsigned e_machine)
 {
   if (e_machine == EM_PARISC)
@@ -4212,9 +4202,6 @@ get_segment_type (Filedata * filedata, unsigned long p_type)
 	    case EM_S390:
 	    case EM_S390_OLD:
 	      result = get_s390_segment_type (p_type);
-	      break;
-	    case EM_RISCV:
-	      result = get_riscv_segment_type (p_type);
 	      break;
 	    default:
 	      result = NULL;
@@ -10943,19 +10930,28 @@ the .dynstr section doesn't match the DT_STRTAB and DT_STRSZ tags\n"));
 
   if (do_dynamic && filedata->dynamic_addr)
     {
-      if (filedata->is_separate)
-	printf (ngettext ("\nIn linked file '%s' the dynamic section at offset 0x%lx contains %lu entry:\n",
-			  "\nIn linked file '%s' the dynamic section at offset 0x%lx contains %lu entries:\n",
-			  (unsigned long) filedata->dynamic_nent),
-		filedata->file_name,
-		filedata->dynamic_addr,
-		(unsigned long) filedata->dynamic_nent);
+      if (filedata->dynamic_nent == 1)
+	{
+	  if (filedata->is_separate)
+	    printf (_("\nIn linked file '%s' the dynamic section at offset 0x%lx contains 1 entry:\n"),
+		    filedata->file_name,
+		    filedata->dynamic_addr);
 	  else
-	    printf (ngettext ("\nDynamic section at offset 0x%lx contains %lu entry:\n",
-			      "\nDynamic section at offset 0x%lx contains %lu entries:\n",
-			      (unsigned long) filedata->dynamic_nent),
+	    printf (_("\nDynamic section at offset 0x%lx contains 1 entry:\n"),
+		    filedata->dynamic_addr);
+	}
+      else
+	{
+	  if (filedata->is_separate)
+	    printf (_("\nIn linked file '%s' the dynamic section at offset 0x%lx contains %lu entries:\n"),
+		    filedata->file_name,
 		    filedata->dynamic_addr,
 		    (unsigned long) filedata->dynamic_nent);
+	  else
+	    printf (_("\nDynamic section at offset 0x%lx contains %lu entries:\n"),
+		    filedata->dynamic_addr,
+		    (unsigned long) filedata->dynamic_nent);
+	}
     }
   if (do_dynamic)
     printf (_("  Tag        Type                         Name/Value\n"));
@@ -16139,24 +16135,6 @@ static const char *const arm_attr_tag_MPextension_use_legacy[] =
 static const char *const arm_attr_tag_MVE_arch[] =
   {"No MVE", "MVE Integer only", "MVE Integer and FP"};
 
-static const char * arm_attr_tag_PAC_extension[] =
-  {"No PAC/AUT instructions",
-   "PAC/AUT instructions permitted in the NOP space",
-   "PAC/AUT instructions permitted in the NOP and in the non-NOP space"};
-
-static const char * arm_attr_tag_BTI_extension[] =
-  {"BTI instructions not permitted",
-   "BTI instructions permitted in the NOP space",
-   "BTI instructions permitted in the NOP and in the non-NOP space"};
-
-static const char * arm_attr_tag_BTI_use[] =
-  {"Compiled without branch target enforcement",
-   "Compiled with branch target enforcement"};
-
-static const char * arm_attr_tag_PACRET_use[] =
-  {"Compiled without return address signing and authentication",
-   "Compiled with return address signing and authentication"};
-
 #define LOOKUP(id, name) \
   {id, #name, 0x80 | ARRAY_SIZE(arm_attr_tag_##name), arm_attr_tag_##name}
 static arm_attr_public_tag arm_attr_public_tags[] =
@@ -16197,10 +16175,6 @@ static arm_attr_public_tag arm_attr_public_tags[] =
   LOOKUP(44, DIV_use),
   LOOKUP(46, DSP_extension),
   LOOKUP(48, MVE_arch),
-  LOOKUP(50, PAC_extension),
-  LOOKUP(52, BTI_extension),
-  LOOKUP(74, BTI_use),
-  LOOKUP(76, PACRET_use),
   {64, "nodefaults", 0, NULL},
   {65, "also_compatible_with", 0, NULL},
   LOOKUP(66, T2EE_use),
@@ -17308,27 +17282,24 @@ display_csky_attribute (unsigned char * p,
       break;
     case Tag_CSKY_FPU_ROUNDING:
       READ_ULEB (val, p, end);
-      if (val == 1)
-	{
-	  printf ("  Tag_CSKY_FPU_ROUNDING:\t");
-	  printf ("Needed\n");
-	}
+      if (val == 1) {
+	printf ("  Tag_CSKY_FPU_ROUNDING:\t");
+	printf ("Needed\n");
+      }
       break;
     case Tag_CSKY_FPU_DENORMAL:
       READ_ULEB (val, p, end);
-      if (val == 1)
-	{
-	  printf ("  Tag_CSKY_FPU_DENORMAL:\t");
-	  printf ("Needed\n");
-	}
+      if (val == 1) {
+	printf ("  Tag_CSKY_FPU_DENORMAL:\t");
+	printf ("Needed\n");
+      }
       break;
     case Tag_CSKY_FPU_Exception:
       READ_ULEB (val, p, end);
-      if (val == 1)
-	{
-	  printf ("  Tag_CSKY_FPU_Exception:\t");
-	  printf ("Needed\n");
-	}
+      if (val == 1) {
+	printf ("  Tag_CSKY_FPU_Exception:\t");
+	printf ("Needed\n");
+      }
       break;
     case Tag_CSKY_FPU_NUMBER_MODULE:
       printf ("  Tag_CSKY_FPU_NUMBER_MODULE:\t");
@@ -18850,14 +18821,8 @@ get_note_type (Filedata * filedata, unsigned e_type)
 	return _("NT_ARM_SVE (AArch SVE registers)");
       case NT_ARM_PAC_MASK:
 	return _("NT_ARM_PAC_MASK (AArch pointer authentication code masks)");
-      case NT_ARM_PACA_KEYS:
-	return _("NT_ARM_PACA_KEYS (ARM pointer authentication address keys)");
-      case NT_ARM_PACG_KEYS:
-	return _("NT_ARM_PACG_KEYS (ARM pointer authentication generic keys)");
       case NT_ARM_TAGGED_ADDR_CTRL:
 	return _("NT_ARM_TAGGED_ADDR_CTRL (AArch tagged address control)");
-      case NT_ARM_PAC_ENABLED_KEYS:
-	return _("NT_ARM_PAC_ENABLED_KEYS (AArch64 pointer authentication enabled keys)");
       case NT_ARC_V2:
 	return _("NT_ARC_V2 (ARC HS accumulator/extra registers)");
       case NT_RISCV_CSR:
@@ -19353,28 +19318,6 @@ decode_aarch64_feature_1_and (unsigned int bitmask)
 }
 
 static void
-decode_1_needed (unsigned int bitmask)
-{
-  while (bitmask)
-    {
-      unsigned int bit = bitmask & (- bitmask);
-
-      bitmask &= ~ bit;
-      switch (bit)
-	{
-	case GNU_PROPERTY_1_NEEDED_INDIRECT_EXTERN_ACCESS:
-	  printf ("indirect external access");
-	  break;
-	default:
-	  printf (_("<unknown: %x>"), bit);
-	  break;
-	}
-      if (bitmask)
-	printf (", ");
-    }
-}
-
-static void
 print_gnu_property_note (Filedata * filedata, Elf_Internal_Note * pnote)
 {
   unsigned char * ptr = (unsigned char *) pnote->descdata;
@@ -19567,23 +19510,6 @@ print_gnu_property_note (Filedata * filedata, Elf_Internal_Note * pnote)
 		  || (type >= GNU_PROPERTY_UINT32_OR_LO
 		      && type <= GNU_PROPERTY_UINT32_OR_HI))
 		{
-		  switch (type)
-		    {
-		    case GNU_PROPERTY_1_NEEDED:
-		      if (datasz != 4)
-			printf (_("1_needed: <corrupt length: %#x> "),
-				datasz);
-		      else
-			{
-			  unsigned int bitmask = byte_get (ptr, 4);
-			  printf ("1_needed: ");
-			  decode_1_needed (bitmask);
-			}
-		      goto next;
-
-		    default:
-		      break;
-		    }
 		  if (type <= GNU_PROPERTY_UINT32_AND_HI)
 		    printf (_("UINT32_AND (%#x): "), type);
 		  else
@@ -19990,26 +19916,6 @@ get_netbsd_elfcore_note_type (Filedata * filedata, unsigned e_type)
 }
 
 static const char *
-get_openbsd_elfcore_note_type (Filedata * filedata, unsigned e_type)
-{
-  switch (e_type)
-    {
-    case NT_OPENBSD_PROCINFO:
-      return _("OpenBSD procinfo structure");
-    case NT_OPENBSD_AUXV:
-      return _("OpenBSD ELF auxiliary vector data");
-    case NT_OPENBSD_REGS:
-      return _("OpenBSD regular registers");
-    case NT_OPENBSD_FPREGS:
-      return _("OpenBSD floating point registers");
-    case NT_OPENBSD_WCOOKIE:
-      return _("OpenBSD window cookie");
-    }
-
-  return get_note_type (filedata, e_type);
-}
-
-static const char *
 get_stapsdt_note_type (unsigned e_type)
 {
   static char buff[64];
@@ -20322,7 +20228,7 @@ get_symbol_for_build_attribute (Filedata *filedata,
 	if (ba_cache.strtab[sym->st_name] == 0)
 	  continue;
 
-	/* The AArch64, ARM and RISC-V architectures define mapping symbols
+	/* The AArch64 and ARM architectures define mapping symbols
 	   (eg $d, $x, $t) which we want to ignore.  */
 	if (ba_cache.strtab[sym->st_name] == '$'
 	    && ba_cache.strtab[sym->st_name + 1] != 0
@@ -20789,10 +20695,6 @@ process_note (Elf_Internal_Note *  pnote,
   else if (startswith (pnote->namedata, "PaX"))
     /* NetBSD-specific core file notes.  */
     return process_netbsd_elf_note (pnote);
-
-  else if (startswith (pnote->namedata, "OpenBSD"))
-    /* OpenBSD-specific core file notes.  */
-    nt = get_openbsd_elfcore_note_type (filedata, pnote->type);
 
   else if (startswith (pnote->namedata, "SPU/"))
     {
@@ -21839,6 +21741,8 @@ process_archive (Filedata * filedata, bool is_thin_archive)
       arch.next_arhdr_offset += sizeof arch.arhdr;
 
       filedata->archive_file_size = strtoul (arch.arhdr.ar_size, NULL, 10);
+      if (filedata->archive_file_size & 01)
+	++filedata->archive_file_size;
 
       name = get_archive_member_name (&arch, &nested_arch);
       if (name == NULL)
@@ -21942,7 +21846,7 @@ process_archive (Filedata * filedata, bool is_thin_archive)
 	  filedata->file_name = qualified_name;
 	  if (! process_object (filedata))
 	    ret = false;
-	  arch.next_arhdr_offset += (filedata->archive_file_size + 1) & -2;
+	  arch.next_arhdr_offset += filedata->archive_file_size;
 	  /* Stop looping with "negative" archive_file_size.  */
 	  if (arch.next_arhdr_offset < filedata->archive_file_size)
 	    arch.next_arhdr_offset = -1ul;

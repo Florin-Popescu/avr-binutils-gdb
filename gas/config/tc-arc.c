@@ -2936,7 +2936,12 @@ md_apply_fix (fixS *fixP,
 	}
       else
 	{
-	  as_bad_subtract (fixP);
+	  as_bad_where (fixP->fx_file, fixP->fx_line,
+			_("can't resolve `%s' {%s section} - `%s' {%s section}"),
+			fx_addsy ? S_GET_NAME (fx_addsy) : "0",
+			segment_name (add_symbol_segment),
+			S_GET_NAME (fx_subsy),
+			segment_name (sub_symbol_segment));
 	  return;
 	}
     }

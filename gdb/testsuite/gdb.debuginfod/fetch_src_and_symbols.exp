@@ -54,7 +54,7 @@ if { [catch {file copy -force ${srcdir}/${subdir}/${srcfile} \
 }
 
 if { [gdb_compile "$sourcetmp" "$binfile" executable {debug}] != "" } {
-    untested "failed to compile"
+    fail "compile"
     return -1
 }
 

@@ -166,7 +166,11 @@ if { "${asm-arch}" == "" } {
 }
 
 # On NetBSD/ELF we need a special NetBSD-identifying note section.
-if { [istarget "*-*-netbsd*"] && ![istarget "*-*-netbsdaout*"] } then {
+if { [istarget "*-*-netbsdelf*"]
+     || [istarget "alpha-*-netbsd*"]
+     || [istarget "mips*-*-netbsd*"]
+     || [istarget "powerpc-*-netbsd*"]
+     || [istarget "x86_64-*-netbsd*"] } then {
     set asm-note "netbsd"
 }
 
@@ -285,6 +289,7 @@ gdb_load ${binfile}
 #
 
 if ![runto_main] then {
+    fail "can't run to main"
     return 0
 }
 

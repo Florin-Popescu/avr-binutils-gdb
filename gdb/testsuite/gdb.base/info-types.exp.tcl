@@ -34,6 +34,7 @@ proc run_test { lang } {
     }
 
     if ![runto_main] then {
+	fail "can't run to main"
 	return 0
     }
 

@@ -39,14 +39,13 @@ extern int openp (const char *, openp_flags, const char *, int,
 
 extern int source_full_path_of (const char *, gdb::unique_xmalloc_ptr<char> *);
 
-extern void mod_path (const char *, std::string &);
+extern void mod_path (const char *, char **);
 
 extern void add_path (const char *, char **, int);
-extern void add_path (const char *, std::string &, int);
 
 extern void directory_switch (const char *, int);
 
-extern std::string source_path;
+extern char *source_path;
 
 extern void init_source_path (void);
 
@@ -72,13 +71,6 @@ extern void init_source_path (void);
 extern scoped_fd find_and_open_source (const char *filename,
 				       const char *dirname,
 				       gdb::unique_xmalloc_ptr<char> *fullname);
-
-/* A wrapper for find_and_open_source that returns the full name.  If
-   the full name cannot be found, a full name is constructed based on
-   the parameters, passing them through rewrite_source_path.  */
-
-extern gdb::unique_xmalloc_ptr<char> find_source_or_rewrite
-     (const char *filename, const char *dirname);
 
 /* Open a source file given a symtab S.  Returns a file descriptor or
    negative number for error.  */

@@ -201,7 +201,7 @@ try_open_exec_file (const char *exec_file_host, struct inferior *inf,
 	}
       catch (const gdb_exception_error &err)
 	{
-	  if (prev_err != err)
+	  if (!exception_print_same (prev_err, err))
 	    warning ("%s", err.what ());
 	}
     }
@@ -676,10 +676,10 @@ program_space::remove_target_sections (void *owner)
 /* See exec.h.  */
 
 void
-exec_on_vfork (inferior *vfork_child)
+exec_on_vfork ()
 {
-  if (!vfork_child->pspace->target_sections ().empty ())
-    vfork_child->push_target (&exec_ops);
+  if (!current_program_space->target_sections ().empty ())
+    current_inferior ()->push_target (&exec_ops);
 }
 
 

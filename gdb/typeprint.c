@@ -104,18 +104,12 @@ print_offset_data::maybe_print_hole (struct ui_file *stream,
       unsigned int hole_bit = hole % TARGET_CHAR_BIT;
 
       if (hole_bit > 0)
-	{
-	  fprintf_styled (stream, highlight_style.style (),
-			  "/* XXX %2u-bit %-7s    */", hole_bit, for_what);
-	  fputs_filtered ("\n", stream);
-	}
+	fprintf_filtered (stream, "/* XXX %2u-bit %-7s    */\n", hole_bit,
+			  for_what);
 
       if (hole_byte > 0)
-	{
-	  fprintf_styled (stream, highlight_style.style (),
-			  "/* XXX %2u-byte %-7s   */", hole_byte, for_what);
-	  fputs_filtered ("\n", stream);
-	}
+	fprintf_filtered (stream, "/* XXX %2u-byte %-7s   */\n", hole_byte,
+			  for_what);
     }
 }
 
@@ -544,7 +538,7 @@ whatis_exp (const char *exp, int show)
   get_user_print_options (&opts);
   if (val != NULL && opts.objectprint)
     {
-      if (type->is_pointer_or_reference ()
+      if (((type->code () == TYPE_CODE_PTR) || TYPE_IS_REFERENCE (type))
 	  && (TYPE_TARGET_TYPE (type)->code () == TYPE_CODE_STRUCT))
 	real_type = value_rtti_indirect_type (val, &full, &top, &using_enc);
       else if (type->code () == TYPE_CODE_STRUCT)
@@ -633,7 +627,7 @@ print_type_scalar (struct type *type, LONGEST val, struct ui_file *stream)
 	}
       if (i < len)
 	{
-	  fputs_filtered (type->field (i).name (), stream);
+	  fputs_filtered (TYPE_FIELD_NAME (type, i), stream);
 	}
       else
 	{

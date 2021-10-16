@@ -35,6 +35,7 @@ set eol "\[\r\n\]+"
 clean_restart ${testfile}
 
 if ![runto_main] then {
+   fail "cannot run to main, testcase aborted"
    return 0
 }
 

@@ -36,6 +36,7 @@ if [prepare_for_testing "failed to prepare" $executable $srcfile \
 }
 
 if ![runto_main] {
+    fail "can't run to main to check for trace support"
     return -1
 }
 
@@ -59,6 +60,7 @@ if { [gdb_compile "$srcdir/$subdir/$srcfile" $binfile \
 clean_restart ${executable}
 
 if ![runto_main] {
+    fail "can't run to main for ftrace tests"
     return 0
 }
 

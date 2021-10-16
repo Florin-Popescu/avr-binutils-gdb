@@ -1596,10 +1596,12 @@ eval_op_ind (struct type *expect_type, struct expression *exp,
 	 There is a risk that this dereference will have side-effects
 	 in the inferior, but being able to print accurate type
 	 information seems worth the risk. */
-      if (!type->is_pointer_or_reference ()
+      if ((type->code () != TYPE_CODE_PTR
+	   && !TYPE_IS_REFERENCE (type))
 	  || !is_dynamic_type (TYPE_TARGET_TYPE (type)))
 	{
-	  if (type->is_pointer_or_reference ()
+	  if (type->code () == TYPE_CODE_PTR
+	      || TYPE_IS_REFERENCE (type)
 	      /* In C you can dereference an array to get the 1st elt.  */
 	      || type->code () == TYPE_CODE_ARRAY)
 	    return value_zero (TYPE_TARGET_TYPE (type),
@@ -2204,7 +2206,7 @@ logical_and_operation::evaluate (struct type *expect_type,
     }
   else
     {
-      bool tem = value_logical_not (arg1);
+      int tem = value_logical_not (arg1);
       if (!tem)
 	{
 	  arg2 = std::get<1> (m_storage)->evaluate (nullptr, exp, noside);
@@ -2233,7 +2235,7 @@ logical_or_operation::evaluate (struct type *expect_type,
     }
   else
     {
-      bool tem = value_logical_not (arg1);
+      int tem = value_logical_not (arg1);
       if (tem)
 	{
 	  arg2 = std::get<1> (m_storage)->evaluate (nullptr, exp, noside);
@@ -2298,7 +2300,7 @@ array_operation::evaluate_struct_tuple (struct value *struct_val,
 	error (_("too many initializers"));
       field_type = struct_type->field (fieldno).type ();
       if (field_type->code () == TYPE_CODE_UNION
-	  && struct_type->field (fieldno).name ()[0] == '0')
+	  && TYPE_FIELD_NAME (struct_type, fieldno)[0] == '0')
 	error (_("don't know which variant you want to set"));
 
       /* Here, struct_type is the type of the inner struct,
@@ -2704,7 +2706,8 @@ unop_ind_base_operation::evaluate_for_sizeof (struct expression *exp,
   value *val = std::get<0> (m_storage)->evaluate (nullptr, exp,
 						  EVAL_AVOID_SIDE_EFFECTS);
   struct type *type = check_typedef (value_type (val));
-  if (!type->is_pointer_or_reference ()
+  if (type->code () != TYPE_CODE_PTR
+      && !TYPE_IS_REFERENCE (type)
       && type->code () != TYPE_CODE_ARRAY)
     error (_("Attempt to take contents of a non-pointer value."));
   type = TYPE_TARGET_TYPE (type);

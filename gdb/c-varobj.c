@@ -165,7 +165,7 @@ c_is_path_expr_parent (const struct varobj *var)
 	      const char *field_name;
 
 	      gdb_assert (var->index < parent_type->num_fields ());
-	      field_name = parent_type->field (var->index).name ();
+	      field_name = TYPE_FIELD_NAME (parent_type, var->index);
 	      return !(field_name == NULL || *field_name == '\0');
 	    }
 	}
@@ -341,7 +341,7 @@ c_describe_child (const struct varobj *parent, int index,
 
 	/* If the type is anonymous and the field has no name,
 	   set an appropriate name.  */
-	field_name = type->field (index).name ();
+	field_name = TYPE_FIELD_NAME (type, index);
 	if (field_name == NULL || *field_name == '\0')
 	  {
 	    if (cname)
@@ -574,7 +574,8 @@ cplus_number_of_children (const struct varobj *var)
       if (opts.objectprint)
 	{
 	  value = var->value.get ();
-	  lookup_actual_type = var->type->is_pointer_or_reference ();
+	  lookup_actual_type = (TYPE_IS_REFERENCE (var->type)
+				|| var->type->code () == TYPE_CODE_PTR);
 	}
       adjust_value_for_child_access (&value, &type, NULL, lookup_actual_type);
 
@@ -610,7 +611,8 @@ cplus_number_of_children (const struct varobj *var)
 	  const struct varobj *parent = var->parent;
 
 	  value = parent->value.get ();
-	  lookup_actual_type = parent->type->is_pointer_or_reference ();
+	  lookup_actual_type = (TYPE_IS_REFERENCE (parent->type)
+				|| parent->type->code () == TYPE_CODE_PTR);
 	}
       adjust_value_for_child_access (&value, &type, NULL, lookup_actual_type);
 
@@ -714,7 +716,8 @@ cplus_describe_child (const struct varobj *parent, int index,
 
   var = (CPLUS_FAKE_CHILD (parent)) ? parent->parent : parent;
   if (opts.objectprint)
-    lookup_actual_type = var->type->is_pointer_or_reference ();
+    lookup_actual_type = (TYPE_IS_REFERENCE (var->type)
+			  || var->type->code () == TYPE_CODE_PTR);
   value = var->value.get ();
   type = varobj_get_value_type (var);
   if (cfull_expression)
@@ -761,7 +764,7 @@ cplus_describe_child (const struct varobj *parent, int index,
 
 	  /* If the type is anonymous and the field has no name,
 	     set an appropriate name.  */
-	  field_name = type->field (type_index).name ();
+	  field_name = TYPE_FIELD_NAME (type, type_index);
 	  if (field_name == NULL || *field_name == '\0')
 	    {
 	      if (cname)
@@ -780,7 +783,7 @@ cplus_describe_child (const struct varobj *parent, int index,
 	  else
 	    {
 	      if (cname)
-		*cname = type->field (type_index).name ();
+		*cname = TYPE_FIELD_NAME (type, type_index);
 
 	      if (cfull_expression)
 		*cfull_expression
@@ -798,7 +801,7 @@ cplus_describe_child (const struct varobj *parent, int index,
 	{
 	  /* This is a baseclass.  */
 	  if (cname)
-	    *cname = type->field (index).name ();
+	    *cname = TYPE_FIELD_NAME (type, index);
 
 	  if (cvalue && value)
 	    *cvalue = value_cast (type->field (index).type (), value);
@@ -827,7 +830,7 @@ cplus_describe_child (const struct varobj *parent, int index,
 		 'class' keyword.  See PR mi/11912  */
 	      *cfull_expression = string_printf ("(%s(class %s%s) %s)",
 						 ptr,
-						 type->field (index).name (),
+						 TYPE_FIELD_NAME (type, index),
 						 ptr,
 						 parent_expression);
 	    }

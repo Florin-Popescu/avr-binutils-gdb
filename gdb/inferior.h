@@ -55,15 +55,12 @@ struct thread_info;
 #include "gdbsupport/refcounted-object.h"
 #include "gdbsupport/forward-scope-exit.h"
 #include "gdbsupport/gdb_unique_ptr.h"
-#include "gdbsupport/intrusive_list.h"
 
 #include "gdbsupport/common-inferior.h"
 #include "gdbthread.h"
 
 #include "process-stratum-target.h"
 #include "displaced-stepping.h"
-
-#include <unordered_map>
 
 struct infcall_suspend_state;
 struct infcall_control_state;
@@ -204,6 +201,10 @@ extern void post_create_inferior (int from_tty);
 
 extern void attach_command (const char *, int);
 
+extern const char *get_inferior_args (void);
+
+extern void set_inferior_args (const char *);
+
 extern void set_inferior_args_vector (int, char **);
 
 extern void registers_info (const char *, int);
@@ -338,8 +339,7 @@ extern void switch_to_inferior_no_thread (inferior *inf);
    listed exactly once in the inferior list, so placing an inferior in
    the inferior list is an implicit, not counted strong reference.  */
 
-class inferior : public refcounted_object,
-		 public intrusive_list_node<inferior>
+class inferior : public refcounted_object
 {
 public:
   explicit inferior (int pid);
@@ -360,7 +360,8 @@ public:
   }
 
   /* Unpush T from this inferior's target stack.  */
-  int unpush_target (struct target_ops *t);
+  int unpush_target (struct target_ops *t)
+  { return m_target_stack.unpush (t); }
 
   /* Returns true if T is pushed in this inferior's target stack.  */
   bool target_is_pushed (target_ops *t)
@@ -386,12 +387,11 @@ public:
   bool has_execution ()
   { return target_has_execution (this); }
 
-  /* This inferior's thread list, sorted by creation order.  */
-  intrusive_list<thread_info> thread_list;
+  /* Pointer to next inferior in singly-linked list of inferiors.  */
+  struct inferior *next = NULL;
 
-  /* A map of ptid_t to thread_info*, for average O(1) ptid_t lookup.
-     Exited threads do not appear in the map.  */
-  std::unordered_map<ptid_t, thread_info *, hash_ptid> ptid_thread_map;
+  /* This inferior's thread list.  */
+  thread_info *thread_list = nullptr;
 
   /* Returns a range adapter covering the inferior's threads,
      including exited threads.  Used like this:
@@ -400,7 +400,7 @@ public:
 	 { .... }
   */
   inf_threads_range threads ()
-  { return inf_threads_range (this->thread_list.begin ()); }
+  { return inf_threads_range (this->thread_list); }
 
   /* Returns a range adapter covering the inferior's non-exited
      threads.  Used like this:
@@ -409,7 +409,7 @@ public:
 	 { .... }
   */
   inf_non_exited_threads_range non_exited_threads ()
-  { return inf_non_exited_threads_range (this->thread_list.begin ()); }
+  { return inf_non_exited_threads_range (this->thread_list); }
 
   /* Like inferior::threads(), but returns a range adapter that can be
      used with range-for, safely.  I.e., it is safe to delete the
@@ -420,11 +420,7 @@ public:
 	 delete f;
   */
   inline safe_inf_threads_range threads_safe ()
-  { return safe_inf_threads_range (this->thread_list.begin ()); }
-
-  /* Delete all threads in the thread list.  If SILENT, exit threads
-     silently.  */
-  void clear_thread_list (bool silent);
+  { return safe_inf_threads_range (this->thread_list); }
 
   /* Continuations-related methods.  A continuation is an std::function
      to be called to finish the execution of a command when running
@@ -434,48 +430,13 @@ public:
   void add_continuation (std::function<void ()> &&cont);
   void do_all_continuations ();
 
-  /* Set/get file name for default use for standard in/out in the inferior.
-
-     On Unix systems, we try to make TERMINAL_NAME the inferior's controlling
-     terminal.
-
-     If TERMINAL_NAME is the empty string, then the inferior inherits GDB's
-     terminal (or GDBserver's if spawning a remote process).  */
-  void set_tty (std::string terminal_name);
-  const std::string &tty ();
-
-  /* Set the argument string to use when running this inferior.
-
-     An empty string can be used to represent "no arguments".  */
-  void set_args (std::string args)
-  {
-    m_args = std::move (args);
-  };
-
-  /* Get the argument string to use when running this inferior.
-
-     No arguments is represented by an empty string.  */
-  const std::string &args () const
-  {
-    return m_args;
-  }
-
-  /* Set the inferior current working directory.
-
-     If CWD is empty, unset the directory.  */
-  void set_cwd (std::string cwd)
-  {
-    m_cwd = std::move (cwd);
-  }
-
-  /* Get the inferior current working directory.
-
-     Return an empty string if the current working directory is not
-     specified.  */
-  const std::string &cwd () const
-  {
-    return m_cwd;
-  }
+  /* Set/get file name for default use for standard in/out in the
+     inferior.  On Unix systems, we try to make TERMINAL_NAME the
+     inferior's controlling terminal.  If TERMINAL_NAME is nullptr or
+     the empty string, then the inferior inherits GDB's terminal (or
+     GDBserver's if spawning a remote process).  */
+  void set_tty (const char *terminal_name);
+  const char *tty ();
 
   /* Convenient handle (GDB inferior id).  Unique across all
      inferiors.  */
@@ -505,6 +466,22 @@ public:
 
   /* The program space bound to this inferior.  */
   struct program_space *pspace = NULL;
+
+  /* The arguments string to use when running.  */
+  gdb::unique_xmalloc_ptr<char> args;
+
+  /* The size of elements in argv.  */
+  int argc = 0;
+
+  /* The vector version of arguments.  If ARGC is nonzero,
+     then we must compute ARGS from this (via the target).
+     This is always coming from main's argv and therefore
+     should never be freed.  */
+  char **argv = NULL;
+
+  /* The current working directory that will be used when starting
+     this inferior.  */
+  gdb::unique_xmalloc_ptr<char> cwd;
 
   /* The terminal state as set by the last target_terminal::terminal_*
      call.  */
@@ -589,17 +566,10 @@ private:
   target_stack m_target_stack;
 
   /* The name of terminal device to use for I/O.  */
-  std::string m_terminal;
+  gdb::unique_xmalloc_ptr<char> m_terminal;
 
   /* The list of continuations.  */
   std::list<std::function<void ()>> m_continuations;
-
-  /* The arguments string to use when running.  */
-  std::string m_args;
-
-  /* The current working directory that will be used when starting
-     this inferior.  */
-  std::string m_cwd;
 };
 
 /* Keep a registry of per-inferior data-pointers required by other GDB
@@ -679,7 +649,7 @@ private:
 
 /* Traverse all inferiors.  */
 
-extern intrusive_list<inferior> inferior_list;
+extern struct inferior *inferior_list;
 
 /* Pull in the internals of the inferiors ranges and iterators.  Must
    be done after struct inferior is defined.  */
@@ -698,7 +668,7 @@ extern intrusive_list<inferior> inferior_list;
 inline all_inferiors_safe_range
 all_inferiors_safe ()
 {
-  return all_inferiors_safe_range (nullptr, inferior_list);
+  return {};
 }
 
 /* Returns a range representing all inferiors, suitable to use with
@@ -711,7 +681,7 @@ all_inferiors_safe ()
 inline all_inferiors_range
 all_inferiors (process_stratum_target *proc_target = nullptr)
 {
-  return all_inferiors_range (proc_target, inferior_list);
+  return all_inferiors_range (proc_target);
 }
 
 /* Return a range that can be used to walk over all inferiors with PID
@@ -720,7 +690,7 @@ all_inferiors (process_stratum_target *proc_target = nullptr)
 inline all_non_exited_inferiors_range
 all_non_exited_inferiors (process_stratum_target *proc_target = nullptr)
 {
-  return all_non_exited_inferiors_range (proc_target, inferior_list);
+  return all_non_exited_inferiors_range (proc_target);
 }
 
 /* Prune away automatically added inferiors that aren't required

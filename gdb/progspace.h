@@ -25,7 +25,6 @@
 #include "gdb_bfd.h"
 #include "gdbsupport/gdb_vecs.h"
 #include "registry.h"
-#include "solist.h"
 #include "gdbsupport/next-iterator.h"
 #include "gdbsupport/safe-iterator.h"
 #include <list>
@@ -60,8 +59,8 @@ public:
   typedef typename objfile_list::iterator::iterator_category iterator_category;
   typedef typename objfile_list::iterator::difference_type difference_type;
 
-  unwrapping_objfile_iterator (objfile_list::iterator iter)
-    : m_iter (std::move (iter))
+  unwrapping_objfile_iterator (const objfile_list::iterator &iter)
+    : m_iter (iter)
   {
   }
 
@@ -90,7 +89,29 @@ private:
 
 /* A range that returns unwrapping_objfile_iterators.  */
 
-using unwrapping_objfile_range = iterator_range<unwrapping_objfile_iterator>;
+struct unwrapping_objfile_range
+{
+  typedef unwrapping_objfile_iterator iterator;
+
+  unwrapping_objfile_range (objfile_list &ol)
+    : m_list (ol)
+  {
+  }
+
+  iterator begin () const
+  {
+    return iterator (m_list.begin ());
+  }
+
+  iterator end () const
+  {
+    return iterator (m_list.end ());
+  }
+
+private:
+
+  objfile_list &m_list;
+};
 
 /* A program space represents a symbolic view of an address space.
    Roughly speaking, it holds all the data associated with a
@@ -201,7 +222,7 @@ struct program_space
      a program space.  */
   ~program_space ();
 
-  using objfiles_range = unwrapping_objfile_range;
+  typedef unwrapping_objfile_range objfiles_range;
 
   /* Return an iterable object that can be used to iterate over all
      objfiles.  The basic use is in a foreach, like:
@@ -209,12 +230,10 @@ struct program_space
      for (objfile *objf : pspace->objfiles ()) { ... }  */
   objfiles_range objfiles ()
   {
-    return objfiles_range
-      (unwrapping_objfile_iterator (objfiles_list.begin ()),
-       unwrapping_objfile_iterator (objfiles_list.end ()));
+    return unwrapping_objfile_range (objfiles_list);
   }
 
-  using objfiles_safe_range = basic_safe_range<objfiles_range>;
+  typedef basic_safe_range<objfiles_range> objfiles_safe_range;
 
   /* An iterable object that can be used to iterate over all objfiles.
      The basic use is in a foreach, like:
@@ -225,10 +244,7 @@ struct program_space
      deleted during iteration.  */
   objfiles_safe_range objfiles_safe ()
   {
-    return objfiles_safe_range
-      (objfiles_range
-	 (unwrapping_objfile_iterator (objfiles_list.begin ()),
-	  unwrapping_objfile_iterator (objfiles_list.end ())));
+    return objfiles_safe_range (objfiles_list);
   }
 
   /* Add OBJFILE to the list of objfiles, putting it just before
@@ -254,8 +270,7 @@ struct program_space
      program space.  Use it like:
 
      for (so_list *so : pspace->solibs ()) { ... }  */
-  so_list_range solibs () const
-  { return so_list_range (this->so_list); }
+  next_adapter<struct so_list> solibs () const;
 
   /* Close and clear exec_bfd.  If we end up with no target sections
      to read memory from, this unpushes the exec_ops target.  */

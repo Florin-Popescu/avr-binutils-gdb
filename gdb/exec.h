@@ -34,11 +34,12 @@ struct objfile;
 
 extern target_section_table build_section_table (struct bfd *);
 
-/* VFORK_CHILD is a child vforked and its program space is shared with its
-   parent.  This pushes the exec target on that inferior's target stack if
-   there are sections in the program space's section table.  */
+/* The current inferior is a child vforked and its program space is
+   shared with its parent.  This pushes the exec target on the
+   current/child inferior's target stack if there are sections in the
+   program space's section table.  */
 
-extern void exec_on_vfork (inferior *vfork_child);
+extern void exec_on_vfork ();
 
 /* Read from mappable read-only sections of BFD executable files.
    Return TARGET_XFER_OK, if read is successful.  Return

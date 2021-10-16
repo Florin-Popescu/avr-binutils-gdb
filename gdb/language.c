@@ -387,6 +387,31 @@ language_info ()
   show_language_command (NULL, 1, NULL, NULL);
 }
 
+
+/* Returns non-zero if the value is a pointer type.  */
+int
+pointer_type (struct type *type)
+{
+  return type->code () == TYPE_CODE_PTR || TYPE_IS_REFERENCE (type);
+}
+
+
+/* This page contains functions that return info about
+   (struct value) values used in GDB.  */
+
+/* Returns non-zero if the value VAL represents a true value.  */
+int
+value_true (struct value *val)
+{
+  /* It is possible that we should have some sort of error if a non-boolean
+     value is used in this context.  Possibly dependent on some kind of
+     "boolean-checking" option like range checking.  But it should probably
+     not depend on the language except insofar as is necessary to identify
+     a "boolean" value (i.e. in C using a float, pointer, etc., as a boolean
+     should be an error, probably).  */
+  return !value_logical_not (val);
+}
+
 /* This page contains functions for the printing out of
    error messages that occur during type- and range-
    checking.  */
@@ -551,7 +576,7 @@ skip_language_trampoline (struct frame_info *frame, CORE_ADDR pc)
    more flexible demangler for the languages that need it.
    FIXME: Sometimes the demangler is invoked when we don't know the
    language, so we can't use this everywhere.  */
-gdb::unique_xmalloc_ptr<char>
+char *
 language_demangle (const struct language_defn *current_language, 
 				const char *mangled, int options)
 {
@@ -771,8 +796,7 @@ public:
 
   /* See language.h.  */
 
-  gdb::unique_xmalloc_ptr<char> demangle_symbol (const char *mangled,
-						 int options) const override
+  char *demangle_symbol (const char *mangled, int options) const override
   {
     /* The auto language just uses the C++ demangler.  */
     return gdb_demangle (mangled, options);

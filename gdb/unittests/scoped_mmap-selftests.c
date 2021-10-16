@@ -89,12 +89,11 @@ static void
 test_normal ()
 {
   char filename[] = "scoped_mmapped_file-selftest-XXXXXX";
-  {
-    scoped_fd fd = gdb_mkostemp_cloexec (filename);
-    SELF_CHECK (fd.get () >= 0);
+  int fd = gdb_mkostemp_cloexec (filename);
+  SELF_CHECK (fd >= 0);
 
-    SELF_CHECK (write (fd.get (), "Hello!", 7) == 7);
-  }
+  SELF_CHECK (write (fd, "Hello!", 7) == 7);
+  close (fd);
 
   gdb::unlinker unlink_test_file (filename);
 

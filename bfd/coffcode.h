@@ -577,7 +577,7 @@ sec_to_styp_flags (const char *sec_name, flagword sec_flags)
       int i;
 
       for (i = 0; i < XCOFF_DWSECT_NBR_NAMES; i++)
-	if (!strcmp (sec_name, xcoff_dwsect_names[i].xcoff_name))
+	if (!strcmp (sec_name, xcoff_dwsect_names[i].name))
 	  {
 	    styp_flags = STYP_DWARF | xcoff_dwsect_names[i].flag;
 	    break;
@@ -1809,7 +1809,7 @@ coff_new_section_hook (bfd * abfd, asection * section)
 
       for (i = 0; i < XCOFF_DWSECT_NBR_NAMES; i++)
 	if (strcmp (bfd_section_name (section),
-		    xcoff_dwsect_names[i].xcoff_name) == 0)
+		    xcoff_dwsect_names[i].name) == 0)
 	  {
 	    section->alignment_power = 0;
 	    sclass = C_DWARF;
@@ -1951,12 +1951,6 @@ coff_set_alignment_hook (bfd * abfd ATTRIBUTE_UNUSED,
       coff_swap_reloc_in (abfd, &dst, &n);
       if (bfd_seek (abfd, oldpos, 0) != 0)
 	return;
-      if (n.r_vaddr < 0x10000)
-	{
-	  _bfd_error_handler (_("%pB: overflow reloc count too small"), abfd);
-	  bfd_set_error (bfd_error_bad_value);
-	  return;
-	}
       section->reloc_count = hdr->s_nreloc = n.r_vaddr - 1;
       section->rel_filepos += relsz;
     }
@@ -4294,7 +4288,7 @@ buy_and_read (bfd *abfd, file_ptr where,
     }
   if (bfd_seek (abfd, where, SEEK_SET) != 0)
     return NULL;
-  return _bfd_malloc_and_read (abfd, amt, amt);
+  return _bfd_alloc_and_read (abfd, amt, amt);
 }
 
 /*
@@ -4358,6 +4352,23 @@ coff_slurp_line_table (bfd *abfd, asection *asect)
 
   BFD_ASSERT (asect->lineno == NULL);
 
+  if (asect->lineno_count > asect->size)
+    {
+      _bfd_error_handler
+	(_("%pB: warning: line number count (%#lx) exceeds section size (%#lx)"),
+	 abfd, (unsigned long) asect->lineno_count, (unsigned long) asect->size);
+      return false;
+    }
+
+  if (_bfd_mul_overflow (asect->lineno_count + 1, sizeof (alent), &amt))
+    {
+      bfd_set_error (bfd_error_file_too_big);
+      return false;
+    }
+  lineno_cache = (alent *) bfd_alloc (abfd, amt);
+  if (lineno_cache == NULL)
+    return false;
+
   native_lineno = (LINENO *) buy_and_read (abfd, asect->line_filepos,
 					   asect->lineno_count,
 					   bfd_coff_linesz (abfd));
@@ -4365,19 +4376,7 @@ coff_slurp_line_table (bfd *abfd, asection *asect)
     {
       _bfd_error_handler
 	(_("%pB: warning: line number table read failed"), abfd);
-      return false;
-    }
-
-  if (_bfd_mul_overflow (asect->lineno_count + 1, sizeof (alent), &amt))
-    {
-      bfd_set_error (bfd_error_file_too_big);
-      free (native_lineno);
-      return false;
-    }
-  lineno_cache = (alent *) bfd_alloc (abfd, amt);
-  if (lineno_cache == NULL)
-    {
-      free (native_lineno);
+      bfd_release (abfd, lineno_cache);
       return false;
     }
 
@@ -4470,7 +4469,7 @@ coff_slurp_line_table (bfd *abfd, asection *asect)
 
   asect->lineno_count = cache_ptr - lineno_cache;
   memset (cache_ptr, 0, sizeof (*cache_ptr));
-  free (native_lineno);
+  bfd_release (abfd, native_lineno);
 
   /* On some systems (eg AIX5.3) the lineno table may not be sorted.  */
   if (!ordered)
@@ -5088,20 +5087,14 @@ coff_slurp_reloc_table (bfd * abfd, sec_ptr asect, asymbol ** symbols)
   native_relocs = (RELOC *) buy_and_read (abfd, asect->rel_filepos,
 					  asect->reloc_count,
 					  bfd_coff_relsz (abfd));
-  if (native_relocs == NULL)
-    return false;
-
   if (_bfd_mul_overflow (asect->reloc_count, sizeof (arelent), &amt))
     {
       bfd_set_error (bfd_error_file_too_big);
       return false;
     }
   reloc_cache = (arelent *) bfd_alloc (abfd, amt);
-  if (reloc_cache == NULL)
-    {
-      free (native_relocs);
-      return false;
-    }
+  if (reloc_cache == NULL || native_relocs == NULL)
+    return false;
 
   for (idx = 0; idx < asect->reloc_count; idx++)
     {
@@ -5171,12 +5164,10 @@ coff_slurp_reloc_table (bfd * abfd, sec_ptr asect, asymbol ** symbols)
 	    (_("%pB: illegal relocation type %d at address %#" PRIx64),
 	     abfd, dst.r_type, (uint64_t) dst.r_vaddr);
 	  bfd_set_error (bfd_error_bad_value);
-	  free (native_relocs);
 	  return false;
 	}
     }
 
-  free (native_relocs);
   asect->relocation = reloc_cache;
   return true;
 }

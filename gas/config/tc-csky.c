@@ -5476,8 +5476,7 @@ md_apply_fix (fixS   *fixP,
 	  else if (fixP->fx_size == 1 && val >= -256 && val <= 255)
 	    ;
 	  else
-	    break;
-
+	    abort ();
 	  md_number_to_chars (buf, val, fixP->fx_size);
 	  fixP->fx_done = 1;
 	}

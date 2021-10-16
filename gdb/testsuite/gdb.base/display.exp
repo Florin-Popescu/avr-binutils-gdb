@@ -52,7 +52,8 @@ if !$use_gdb_stub {
 # Ok, on to real life
 #
 if ![runto_main] then {
-    return
+    fail "could not run to main - other tests will fail."
+    continue
 }
 
 # Disable hardware watchpoints if necessary.

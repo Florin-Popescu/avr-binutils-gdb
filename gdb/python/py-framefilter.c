@@ -348,12 +348,16 @@ py_print_single_arg (struct ui_out *out,
     {
       string_file stb;
 
-      fputs_filtered (fa->sym->print_name (), &stb);
+      fprintf_symbol_filtered (&stb, fa->sym->print_name (),
+			       fa->sym->language (),
+			       DMGL_PARAMS | DMGL_ANSI);
       if (fa->entry_kind == print_entry_values_compact)
 	{
 	  stb.puts ("=");
 
-	  fputs_filtered (fa->sym->print_name (), &stb);
+	  fprintf_symbol_filtered (&stb, fa->sym->print_name (),
+				   fa->sym->language (),
+				   DMGL_PARAMS | DMGL_ANSI);
 	}
       if (fa->entry_kind == print_entry_values_only
 	  || fa->entry_kind == print_entry_values_compact)
