@@ -11394,12 +11394,18 @@ remote_target::xfer_partial (enum target_object object,
   *p2 = '\0';
   gdb_assert (annex[i] == '\0');
 
-  i = putpkt (rs->buf);
-  if (i < 0)
-    return TARGET_XFER_E_IO;
+  if (offset==0)
+    {
+      /* Only send the command if xfer is requested for first time.  */
+      i = putpkt (rs->buf);
+      if (i < 0)
+        return TARGET_XFER_E_IO;
+    }
 
   getpkt (&rs->buf, 0);
   strcpy ((char *) readbuf, rs->buf.data ());
+
+  if (rs->buf.back() == '\0') return TARGET_XFER_EOF;
 
   *xfered_len = strlen ((char *) readbuf);
   return (*xfered_len != 0) ? TARGET_XFER_OK : TARGET_XFER_EOF;
