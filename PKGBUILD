@@ -35,12 +35,6 @@ build() {
 	make all
 }
 
-check() {
-	cd "${srcdir}/${pkgname}-${pkgver}-${pkgrel}"
-	cd build
-	make -k check
-}
-
 package() {
 	cd "${srcdir}/${pkgname}-${pkgver}-${pkgrel}"
 	cd build
